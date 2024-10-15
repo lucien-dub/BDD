@@ -4,8 +4,18 @@ from django.db import models
 
 
 class Equipes(models.Model):
+
+    class Sport(models.TextChoices):
+        Rugby = 'Rugby'
+        Football = 'Football'
+        Volleyball = 'Volleyball'
+        Handball = 'Handball'
+        Basketball = 'Basketball'
+        Tennis = 'Tennis'
+
+
     id = models.AutoField(primary_key=True)
-    sport = {"Rugby","Tennis","Football","Basketball","Handball","Volleyball"}
+    sport = models.fields.CharField(choices = Sport.choices, max_length = 100)
     name = models.fields.CharField(max_length=100)
     lieu = models.fields.CharField(max_length=100)
     niveau = models.fields.IntegerField()
