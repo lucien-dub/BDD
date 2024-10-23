@@ -1,7 +1,8 @@
 # URL du fichier à télécharger
 import requests
 import pandas as pd 
-
+import hashlib
+                      
 # Define the URL and the data you want to send with the POST request
 url = 'https://sportco.abyss-clients.com/rencontres/planning/export'
 
@@ -17,8 +18,24 @@ if response.status_code == 200:
 else:
     print(f"Failed to download file. Status code: {response.status_code}")
 
+# File to check
+file_name = 'export_planning.xlsx' 
 
-# read an excel file and convert into a dataframe object 
-df = pd.DataFrame(pd.read_excel("export_planning.xlsx")) 
-# show the dataframe 
-print(df) 
+# Open,close, read file and calculate MD5 on its contents 
+with open(file_name, 'rb') as file_to_check:
+    # read contents of the file
+    data = file_to_check.read()    
+    md5_returned = hashlib.md5(data).hexdigest
+
+original_md5 = '6e2a75253d379a3e7583d86c140e9286'    # mettre l'ancien hash du fichier
+
+# Finally compare original MD5 with freshly calculated and convert it to a dataframes
+if original_md5 == md5_returned:
+    print("MD5 verified.")
+else:
+    print("MD5 verification failed!.")
+    original_md5 = md5_returned
+    dfPlanning = pd.DataFrame(pd.read_excel(file_name))
+    print(dfPlanning)
+
+    
