@@ -35,3 +35,4 @@ class MyManager(models.Manager):
 class MyModel(models.Model):
     objects = MyManager()
 
+
