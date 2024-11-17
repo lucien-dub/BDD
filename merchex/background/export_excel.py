@@ -27,7 +27,11 @@ def export_excel_website(url : str,df_original, name_file : str):
     # compare les deux dataframes
     if df_original.equals(df_new):
         print("Les fichiers sont identiques.")
+        change = False
     else:
         print("Les fichiers sont différents.")
         df_original = df_new
+        change = True
+
+    return(df_original, change)
     
