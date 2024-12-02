@@ -1,6 +1,9 @@
 # models.py
 from django.db import models
-
+import pandas as pd
+from datetime import datetime
+from django.db import transaction
+import re
 
 current_id = 0
 
@@ -10,7 +13,7 @@ def get_next_id():
     return current_id
 
 class Match(models.Model):
-    id = models.IntegerField()
+    id = models.IntegerField(primary_key=True)
     sport = models.CharField(max_length=50)
     date = models.DateField()
     heure = models.TimeField()
@@ -24,14 +27,17 @@ class Match(models.Model):
     def __str__(self):
         return f"{self.equipe1} vs {self.equipe2} - {self.date}"
 
-# import_matches.py
-import pandas as pd
-from datetime import datetime
-from django.db import transaction
-import re
-#from yourapp.models import Match # je pense pas besoin de cette ligne car c'est plus haut dans le même fichier
+class Cote(models.Model):
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="cotes")
+    type_cote = models.CharField(max_length=50)  # Par exemple, "victoire", "nul", etc.
+    valeur = models.FloatField()
 
-# extraction du sport dans la chaine de caractère avec regex
+    def __str__(self):
+        return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
+
+
+
+# extraction des différentes données dans la chaine de caractère avec regex
 def extraire_sport(texte):
     match = re.search(r'-\s*(.*?)\s*\(', texte)
     return match.group(1).strip() if match else ''
