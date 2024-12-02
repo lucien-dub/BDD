@@ -2,7 +2,7 @@ import export_excel
 import pandas as pd
 from django.db import models, transaction
 import time
-from your_app.models import YourModel  # Remplacez par votre modèle
+from background.creation_bdd import match  # Remplacez par votre modèle
 import logging
 
 # Configuration du logging
@@ -32,7 +32,7 @@ def update_database(df_diff):
                 try:
                     if row['source'] == 'df_new':
                         # La ligne est nouvelle ou modifiée dans excel
-                        obj, created = YourModel.objects.update_or_create(
+                        obj, created = match.objects.update_or_create(
                             defaults=data,
                             **unique_fields
                         )
@@ -44,9 +44,9 @@ def update_database(df_diff):
                     elif row['source'] == 'df_original':
                         # La ligne existe dans la base mais pas dans excel
                         # Vous pouvez choisir de la supprimer ou la marquer comme inactive
-                        YourModel.objects.filter(**unique_fields).delete()
+                        match.objects.filter(**unique_fields).delete()
                         # Ou pour marquer comme inactif si vous avez un champ 'active':
-                        # YourModel.objects.filter(**unique_fields).update(active=False)
+                        # match.objects.filter(**unique_fields).update(active=False)
                 
                 except Exception as e:
                     logger.error(f"Erreur lors du traitement de la ligne {data}: {str(e)}")
@@ -60,6 +60,8 @@ def update_database(df_diff):
         return False
 
 # Votre boucle principale
+url = '"oirshgfoifshogdihfoghfoighdfgfd.fr' #URL à modifier selon ce qu'on souhaite
+name_file = 'lroghdsogihdfoixwhgbdoifxhdgovdhfxgcoifdh.xls' #Name_file à modifier selon ce qu'on souhaite extraire
 while True:
     try:
         [excel, change] = export_excel.export_excel_website(url, df_original, name_file)
