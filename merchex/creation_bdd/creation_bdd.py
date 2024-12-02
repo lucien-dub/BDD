@@ -5,6 +5,8 @@ from datetime import datetime
 from django.db import transaction
 import re
 from django.core.validators import MinValueValidator
+from django.apps import apps
+from listings.models import Match, Cote
 
 current_id = 0
 
@@ -12,31 +14,6 @@ def get_next_id():
     global current_id
     current_id += 1
     return current_id
-
-class Match(models.Model):
-    id = models.IntegerField(primary_key=True)
-    sport = models.CharField(max_length=50)
-    date = models.DateField()
-    heure = models.TimeField()
-    equipe1 = models.CharField(max_length=100)
-    equipe2 = models.CharField(max_length=100)
-    score1 = models.IntegerField()  
-    score2 = models.IntegerField()
-    niveau = models.CharField(max_length=50)
-    poule = models.CharField(max_length=50)
-    
-    def __str__(self):
-        return f"{self.equipe1} vs {self.equipe2} - {self.date}"
-
-class Cote(models.Model):
-    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="cotes")
-    type_cote = models.CharField(max_length=50)  # Par exemple, "victoire", "nul", etc.
-    valeur = models.FloatField(validators=[MinValueValidator(1.01)])
-
-    def __str__(self):
-        return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
-
-
 
 # extraction des différentes données dans la chaine de caractère avec regex
 def extraire_sport(texte):
@@ -53,9 +30,8 @@ def extraire_poule(texte):
 
 def import_matches(file_path):
     # Lire le fichier
-    df = pd.read_csv(file_path, delimiter=' ', header=0)
+    df = pd.read_excel(file_path, engine = 'openpyxl')
 
-    
     try:
         with transaction.atomic():
             for index, row in df.iterrows():

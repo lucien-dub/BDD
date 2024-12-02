@@ -65,9 +65,9 @@ url = 'http://sportco.abyss-clients.com/rencontres/resultats/export' #URL à mod
 name_file = 'export_resultat.xlsx' #Name_file à modifier selon ce qu'on souhaite extraire
 df_original = pd.DataFrame() #dataframe vide
 
-while True:
-    [data,change] = export_excel_website(url,df_original,name_file)
-    if change == True:
-        """effectue les changements dans la base de donnée"""
-    time.sleep(3600)
+#while True:
+[data,change] = export_excel_website(url,df_original,name_file)
+    #if change == True:
+    #"""effectue les changements dans la base de donnée"""
+    #time.sleep(3600)
 
