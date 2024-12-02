@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'listings',
     'rest_framework',
     'background_task',
+    'creation_bdd',
 ]
 
 MIDDLEWARE = [

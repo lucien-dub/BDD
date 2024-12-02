@@ -9,6 +9,7 @@ def export_excel_website(url : str,df_original, name_file : str):
     """
     import requests
     import pandas as pd 
+    import openpyxl
 
     response = requests.post(url)
 
@@ -22,7 +23,7 @@ def export_excel_website(url : str,df_original, name_file : str):
         print(f"Failed to download file. Status code: {response.status_code}")
 
     # File to check
-    df_new = pd.DataFrame(pd.read_excel(name_file))
+    df_new = pd.DataFrame(pd.read_excel(name_file,engine='openpyxl'))
 
     # compare les deux dataframes
     if df_original.equals(df_new):

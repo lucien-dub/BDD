@@ -1,10 +1,9 @@
 from background.export_excel import export_excel_website
 from django.db import models
-import export_excel
 import pandas as pd
 from django.db import models, transaction
 import time
-from background.creation_bdd import match  # Remplacez par votre modèle
+from creation_bdd.creation_bdd import Match  # Remplacez par votre modèle
 import logging
 
 # Configuration du logging
@@ -62,11 +61,12 @@ def update_database(df_diff):
         return False
 
 # Votre boucle principale
-url = '"oirshgfoifshogdihfoghfoighdfgfd.fr' #URL à modifier selon ce qu'on souhaite
-name_file = 'lroghdsogihdfoixwhgbdoifxhdgovdhfxgcoifdh.xls' #Name_file à modifier selon ce qu'on souhaite extraire
+url = 'http://sportco.abyss-clients.com/rencontres/resultats/export' #URL à modifier selon ce qu'on souhaite
+name_file = 'export_resultat.xlsx' #Name_file à modifier selon ce qu'on souhaite extraire
+df_original = pd.DataFrame() #dataframe vide
 
 while True:
-    [data,change] = export_excel_website()
+    [data,change] = export_excel_website(url,df_original,name_file)
     if change == True:
         """effectue les changements dans la base de donnée"""
     time.sleep(3600)

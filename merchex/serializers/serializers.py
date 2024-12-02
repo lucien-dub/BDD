@@ -1,6 +1,6 @@
 from rest_framework.serializers import ModelSerializer
  
-from background.creation_bdd import Match
+from merchex.creation_bdd.creation_bdd import Match
  
 class MatchSerializer(ModelSerializer):
  
