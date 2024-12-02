@@ -14,28 +14,31 @@ class Match(models.Model):
     
     def __str__(self):
         return f"{self.equipe1} vs {self.equipe2} - {self.date}"
-    
-    class Meta:
-        verbose_name = "Match de rugby"
-        verbose_name_plural = "Matchs de rugby"
 
 # import_matches.py
 import pandas as pd
 from datetime import datetime
 from django.db import transaction
+import re
 #from yourapp.models import Match # je pense pas besoin de cette ligne car c'est plus haut dans le même fichier
 
-def clean_poule_niveau(poule_string):
-    """Extrait le niveau et la poule depuis la chaîne de caractères"""
-    parts = poule_string.split('-')
-    if len(parts) >= 2:
-        niveau = parts[0].strip()
-        return niveau, poule_string
-    return poule_string, poule_string
+# extraction du sport dans la chaine de caractère avec regex
+def extraire_sport(texte):
+    match = re.search(r'-\s*(.*?)\s*\(', texte)
+    return match.group(1).strip() if match else ''
+
+def extraire_niveau(texte):
+    match = re.search(r'\((.*?)\)', texte)
+    return match.group(1).strip() if match else ''
+
+def extraire_poule(texte):
+    match = re.search(r'(\w{2})(?= -)',texte)
+    return match.group(1).strip() if match else ''
 
 def import_matches(file_path):
     # Lire le fichier
     df = pd.read_csv(file_path, delimiter=' ', header=0)
+
     
     try:
         with transaction.atomic():
@@ -44,20 +47,17 @@ def import_matches(file_path):
                 date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
                                           format='%d/%m/%Y %H:%M')
                 
-                # Extraction du niveau et de la poule
-                niveau, poule = clean_poule_niveau(row['Poule'])
-                
                 # Création du match
                 match = Match.objects.create(
-                    sport=sport;
+                    sport=extraire_sport(row['Poule']),
                     date=date_heure.date(),
                     heure=date_heure.time(),
                     equipe1=row['Équipe 1'].strip(),
                     equipe2=row['Équipe 2'].strip(),
                     score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
                     score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
-                    niveau=niveau,
-                    poule=poule
+                    niveau=extraire_niveau(row['Poule']),
+                    poule=extraire_poule(row['Poule'])
                 )
                 print(f"Match importé: {match}")
                 
