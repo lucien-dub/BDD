@@ -1,9 +1,7 @@
 from django.contrib import admin
 
-from listings.models import Matchs
-from listings.models import Equipes
+from background.actualisation_bdd import Match
 
-admin.site.register(Matchs)
-admin.site.register(Equipes)
+admin.site.register(Match)
 
 # Register your models here.

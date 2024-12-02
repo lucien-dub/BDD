@@ -1,10 +1,10 @@
 from rest_framework.serializers import ModelSerializer
  
-from listings.models import Matchs
+from background.creation_bdd import Match
  
-class MatchsSerializer(ModelSerializer):
+class MatchSerializer(ModelSerializer):
  
     class Meta:
-        model = Matchs
-        fields = ['date', 'equipe1', 'equipe2', 'passe']
+        model = Match
+        fields = ['sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2']
         
