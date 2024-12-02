@@ -1,7 +1,8 @@
 # models.py
 from django.db import models
 
-class RugbyMatch(models.Model):
+class Match(models.Model):
+    sport = models.CharField(max_length=50)
     date = models.DateField()
     heure = models.TimeField()
     equipe1 = models.CharField(max_length=100)
@@ -22,7 +23,7 @@ class RugbyMatch(models.Model):
 import pandas as pd
 from datetime import datetime
 from django.db import transaction
-from yourapp.models import RugbyMatch
+#from yourapp.models import Match # je pense pas besoin de cette ligne car c'est plus haut dans le même fichier
 
 def clean_poule_niveau(poule_string):
     """Extrait le niveau et la poule depuis la chaîne de caractères"""
@@ -32,7 +33,7 @@ def clean_poule_niveau(poule_string):
         return niveau, poule_string
     return poule_string, poule_string
 
-def import_rugby_matches(file_path):
+def import_matches(file_path):
     # Lire le fichier
     df = pd.read_csv(file_path, delimiter=' ', header=0)
     
@@ -47,7 +48,8 @@ def import_rugby_matches(file_path):
                 niveau, poule = clean_poule_niveau(row['Poule'])
                 
                 # Création du match
-                match = RugbyMatch.objects.create(
+                match = Match.objects.create(
+                    sport=sport;
                     date=date_heure.date(),
                     heure=date_heure.time(),
                     equipe1=row['Équipe 1'].strip(),
@@ -65,4 +67,4 @@ def import_rugby_matches(file_path):
 # Exemple d'utilisation
 if __name__ == "__main__":
     file_path = 'Export_Resultats_20241117.csv'  # Assurez-vous que le fichier est au format CSV
-    import_rugby_matches(file_path)
+    import_matches(file_path)
