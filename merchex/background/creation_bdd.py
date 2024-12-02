@@ -1,7 +1,16 @@
 # models.py
 from django.db import models
 
+
+current_id = 0
+
+def get_next_id():
+    global current_id
+    current_id += 1
+    return current_id
+
 class Match(models.Model):
+    id = models.IntegerField()
     sport = models.CharField(max_length=50)
     date = models.DateField()
     heure = models.TimeField()
@@ -49,6 +58,7 @@ def import_matches(file_path):
                 
                 # Création du match
                 match = Match.objects.create(
+                    id = get_next_id(),
                     sport=extraire_sport(row['Poule']),
                     date=date_heure.date(),
                     heure=date_heure.time(),
