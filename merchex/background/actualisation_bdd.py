@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 from background.export_excel import export_excel_website
 from django.db import models
-
-=======
 import export_excel
 import pandas as pd
 from django.db import models, transaction
@@ -67,9 +64,9 @@ def update_database(df_diff):
 # Votre boucle principale
 url = '"oirshgfoifshogdihfoghfoighdfgfd.fr' #URL à modifier selon ce qu'on souhaite
 name_file = 'lroghdsogihdfoixwhgbdoifxhdgovdhfxgcoifdh.xls' #Name_file à modifier selon ce qu'on souhaite extraire
->>>>>>> c42bceba7236306ac6db58d66fa5cb8f2f6bc3d4
+
 while True:
-    [data,change]export_excel_website()
+    [data,change] = export_excel_website()
     if change == True:
         """effectue les changements dans la base de donnée"""
     time.sleep(3600)
