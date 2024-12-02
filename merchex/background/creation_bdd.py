@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from django.db import transaction
 import re
+from django.core.validators import MinValueValidator
 
 current_id = 0
 
@@ -19,7 +20,7 @@ class Match(models.Model):
     heure = models.TimeField()
     equipe1 = models.CharField(max_length=100)
     equipe2 = models.CharField(max_length=100)
-    score1 = models.IntegerField()
+    score1 = models.IntegerField()  
     score2 = models.IntegerField()
     niveau = models.CharField(max_length=50)
     poule = models.CharField(max_length=50)
@@ -30,7 +31,7 @@ class Match(models.Model):
 class Cote(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="cotes")
     type_cote = models.CharField(max_length=50)  # Par exemple, "victoire", "nul", etc.
-    valeur = models.FloatField()
+    valeur = models.FloatField(validators=[MinValueValidator(1.01)])
 
     def __str__(self):
         return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
@@ -79,6 +80,18 @@ def import_matches(file_path):
                 
     except Exception as e:
         print(f"Erreur lors de l'import: {str(e)}")
+
+
+#Calcul de la côte
+def calculer_cote(Match):
+    """Calcul de la cote pour le match (ici la formule est abérrante juste pour pouvoir avancer dans le projet)"""
+    return round(1 / (1.01+Match.id), 2)  # Formule basique : 1 / id
+
+def affectation_cote(Match):
+    for Match in Match.objects.all():
+        Cote.objects.create(match=Match, type_cote=f"victoire {Match.equipe1}", valeur=calculer_cote(Match.id))
+        Cote.objects.create(match=Match, type_cote=f"victoire {Match.equipe2}", valeur=1+ calculer_cote(Match.id))
+        Cote.objects.create(match=Match, type_cote="Nul", valeur=2 + calculer_cote(Match.id))
 
 # Exemple d'utilisation
 if __name__ == "__main__":
