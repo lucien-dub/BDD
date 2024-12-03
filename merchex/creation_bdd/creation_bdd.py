@@ -58,16 +58,25 @@ def import_matches(file_path):
         print(f"Erreur lors de l'import: {str(e)}")
 
 
-#Calcul de la côte
-def calculer_cote(Match):
-    """Calcul de la cote pour le match (ici la formule est abérrante juste pour pouvoir avancer dans le projet)"""
-    return round(1 / (1.01+Match.id), 2)  # Formule basique : 1 / id
+def calculer_cote(match):
+    """Calcul de la cote pour le match."""
+    return round(1 / (1.01 + match.id), 2)
 
-def affectation_cote(Match):
-    for Match in Match.objects.all():
-        Cote.objects.create(match=Match, type_cote=f"victoire {Match.equipe1}", valeur=calculer_cote(Match.id))
-        Cote.objects.create(match=Match, type_cote=f"victoire {Match.equipe2}", valeur=1+ calculer_cote(Match.id))
-        Cote.objects.create(match=Match, type_cote="Nul", valeur=2 + calculer_cote(Match.id))
+def affectation_cote(matches):
+    """Ajoute des cotes pour chaque match en utilisant bulk_create."""
+    cotes_a_creer = []
+    
+    for match in matches:
+        # Créer les trois types de cotes pour chaque match
+        cotes_a_creer.extend([
+            Cote(match=match, type_cote=f"victoire {match.equipe1}", valeur=calculer_cote(match)),
+            Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
+            Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
+        ])
+    
+    # Utiliser bulk_create pour insérer tous les objets en une seule requête
+    Cote.objects.bulk_create(cotes_a_creer)
+
 
 # Exemple d'utilisation
 if __name__ == "__main__":
