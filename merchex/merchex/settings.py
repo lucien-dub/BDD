@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'background_task',
     'creation_bdd',
+    'corsheaders'
 ]
 
 MIDDLEWARE = [
@@ -51,6 +52,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware'
 ]
 
 ROOT_URLCONF = 'merchex.urls'
@@ -132,3 +134,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentification.JWTAuthentification',
     ),
 }
+
+CORS_ALLOWED_ORIGINES = [
+    "http://localhost:8100", #URL du front-end Ionic
+]
