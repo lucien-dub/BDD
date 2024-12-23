@@ -2,10 +2,11 @@ from django.shortcuts import render
 from django.http import HttpResponse
 
 from background.actualisation_bdd import Match
-from serializers.serializers import MatchSerializer
+from serializers.serializers import MatchsSerializer
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
+
 
 
 def about(request):
