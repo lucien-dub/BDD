@@ -1,6 +1,7 @@
 # listings/models.py
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.contrib.auth.models import AbstractUser
 
 
 class MyManager(models.Manager):
@@ -42,4 +43,9 @@ class Cote(models.Model):
 
     def __str__(self):
         return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
+    
+
+class CustomUser(AbstractUser):
+    points = models.IntegerField(default=0)
+
 
