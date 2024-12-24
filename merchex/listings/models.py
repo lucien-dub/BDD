@@ -44,10 +44,26 @@ class Cote(models.Model):
         return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
     
 
-class Users(models.Model):
+class User(models.Model):
     id = models.IntegerField(primary_key=True)
     prenom = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
     age = models.IntegerField(max_length=3)
-    points = models.IntegerField(max_length=10)
     email = models.EmailField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.username
+
+
+class UserPoint(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='points')
+    points = models.IntegerField(default=0)
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-points']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.points} points"
