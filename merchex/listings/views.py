@@ -6,7 +6,7 @@ from serializers.serializers import MatchSerializer
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-
+from rest_framework.decorators import APIView
 
 
 
@@ -21,3 +21,4 @@ class MatchsAPIView(APIView):
         match = Match.objects.all()
         serializer = MatchSerializer(match, many=True)
         return Response(serializer.data)
+
