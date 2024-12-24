@@ -1,9 +1,8 @@
 from rest_framework.serializers import ModelSerializer
 from creation_bdd.creation_bdd import Match
-from db.models import 
- 
+
 class MatchSerializer(ModelSerializer):
  
     class Meta:
         model = Match
-        fields = ['sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2', 'heure']
+        fields = '__all__'
