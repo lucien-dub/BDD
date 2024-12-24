@@ -18,7 +18,6 @@ from django.contrib import admin
 from django.urls import path, include
 from listings import views
 from django.conf.urls import include
-from  listings.views import UserPointsView
 
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from listings.views import MatchsAPIView
@@ -28,7 +27,6 @@ urlpatterns = [
     path('about-us/', views.about),
     path('api-auth/', include('rest_framework.urls')),
     path('api/matchs/', MatchsAPIView.as_view()),
-    path('api/user/points', UserPointsView.as_view(),name='user-points'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
