@@ -1,9 +1,9 @@
-from export_excel import export_excel_website
+from background.export_excel import export_excel_website
 from django.db import models
 import pandas as pd
 from django.db import models, transaction
 import time
-from creation_bdd import Match  # Remplacez par votre modèle
+from listings.models import Match
 import logging
 
 # Configuration du logging
