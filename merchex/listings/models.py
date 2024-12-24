@@ -44,6 +44,10 @@ class Cote(models.Model):
         return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
     
 
-
-
-
+class Users(models.Model):
+    id = models.IntegerField(primary_key=True)
+    prenom = models.CharField(max_length=100)
+    nom = models.CharField(max_length=100)
+    age = models.IntegerField(max_length=3)
+    points = models.IntegerField(max_length=10)
+    email = models.EmailField(max_length=100)
