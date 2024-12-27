@@ -1,6 +1,8 @@
 # listings/models.py
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.contrib.auth.models import User
+from django.db.models import Sum
 
 
 class MyManager(models.Manager):
@@ -48,7 +50,7 @@ class User(models.Model):
     id = models.IntegerField(primary_key=True)
     prenom = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
-    age = models.IntegerField(max_length=3)
+    age = models.IntegerField()
     email = models.EmailField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -57,13 +59,36 @@ class User(models.Model):
         return self.username
 
 
-class UserPoint(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='points')
-    points = models.IntegerField(default=0)
+class UserPoints(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='user_points')
+    total_points = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        ordering = ['-points']
 
     def __str__(self):
-        return f"{self.user.username} - {self.points} points"
+        return f"{self.user.username} - {self.total_points} points"
+
+    @classmethod
+    def get_or_create_points(cls, user):
+        user_points, created = cls.objects.get_or_create(
+            user=user,
+            defaults={'total_points': 0}
+        )
+        return user_points
+    
+class PointTransaction(models.Model):
+    EARN = 'EARN'
+    SPEND = 'SPEND'
+    
+    TRANSACTION_TYPES = [
+        (EARN, 'Points gagnés'),
+        (SPEND, 'Points dépensés'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='point_transactions')
+    points = models.IntegerField()
+    transaction_type = models.CharField(max_length=5, choices=TRANSACTION_TYPES)
+    reason = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.transaction_type} - {self.points} points"    

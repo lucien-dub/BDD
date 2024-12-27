@@ -41,7 +41,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'background_task',
     'creation_bdd',
-    'corsheaders'
+    'rest_framework_simplejwt',
+    'corsheaders',
+    'authentication',
 ]
 
 MIDDLEWARE = [
@@ -52,8 +54,27 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware'
+    
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+}
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8100",  # Pour Ionic en développement
+]
+
+#AUTH_USER_MODEL = 'authentication.User'
 
 ROOT_URLCONF = 'merchex.urls'
 
@@ -127,5 +148,3 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-CORS_ALLOW_ALL_ORIGINS = True

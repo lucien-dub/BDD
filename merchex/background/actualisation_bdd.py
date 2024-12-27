@@ -5,6 +5,8 @@ from django.db import models, transaction
 import time
 from listings.models import Match
 import logging
+import listings
+
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +35,7 @@ def update_database(df_diff):
                 try:
                     if row['source'] == 'df_new':
                         # La ligne est nouvelle ou modifiée dans excel
-                        obj, created = match.objects.update_or_create(
+                        obj, created = listings.objects.update_or_create(
                             defaults=data,
                             **unique_fields
                         )
@@ -45,7 +47,7 @@ def update_database(df_diff):
                     elif row['source'] == 'df_original':
                         # La ligne existe dans la base mais pas dans excel
                         # Vous pouvez choisir de la supprimer ou la marquer comme inactive
-                        match.objects.filter(**unique_fields).delete()
+                        listings.objects.filter(**unique_fields).delete()
                         # Ou pour marquer comme inactif si vous avez un champ 'active':
                         # match.objects.filter(**unique_fields).update(active=False)
                 
