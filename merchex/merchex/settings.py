@@ -43,7 +43,6 @@ INSTALLED_APPS = [
     'creation_bdd',
     'rest_framework_simplejwt',
     'corsheaders',
-    'authentication',
 ]
 
 MIDDLEWARE = [
