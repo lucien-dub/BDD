@@ -53,6 +53,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware'
     
 ]
 
@@ -72,6 +73,8 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8100",  # Pour Ionic en développement
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 #AUTH_USER_MODEL = 'authentication.User'
 
