@@ -27,6 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+AUTH_USER_MODEL = 'listings.User'
 
 # Application definition
 
@@ -42,7 +43,7 @@ INSTALLED_APPS = [
     'background_task',
     'creation_bdd',
     'rest_framework_simplejwt',
-    'corsheaders',
+    'corsheaders'
 ]
 
 MIDDLEWARE = [
@@ -53,30 +54,42 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware'
-    
+    'corsheaders.middleware.CorsMiddleware',   
 ]
 
+CORS_ALLOW_CREDENTIALS = True
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',  # Si vous permettez un accès sans restriction
+    ],
 }
+
+AUTH_USER_MODEL = 'auth.User'
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': True,
+    'USER_ID_FIELD': 'id', 
+    'USER_ID_CLAIM': 'user_id',
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
 }
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8100",  # Pour Ionic en développement
+    "http://192.168.1.101:8100",
+    "http://127.0.0.1:8100",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
-
-#AUTH_USER_MODEL = 'authentication.User'
 
 ROOT_URLCONF = 'merchex.urls'
 
@@ -150,3 +163,4 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+

@@ -3,6 +3,9 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 from django.db.models import Sum
+from django.contrib.auth.models import AbstractUser
+from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 
 class MyManager(models.Manager):
@@ -44,19 +47,7 @@ class Cote(models.Model):
 
     def __str__(self):
         return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
-    
 
-class User(models.Model):
-    id = models.IntegerField(primary_key=True)
-    prenom = models.CharField(max_length=100)
-    nom = models.CharField(max_length=100)
-    age = models.IntegerField()
-    email = models.EmailField(max_length=100)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.username
 
 
 class UserPoints(models.Model):

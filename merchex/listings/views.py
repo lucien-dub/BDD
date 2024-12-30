@@ -2,11 +2,12 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.contrib.auth.models import User
+
 
 from background.actualisation_bdd import Match
 from serializers.serializers import MatchSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from listings.models import User
 from listings.models import UserPoints, PointTransaction
 
 from rest_framework.views import APIView
@@ -15,7 +16,7 @@ from rest_framework.decorators import APIView
 from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
-
+from rest_framework.exceptions import AuthenticationFailed
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -138,3 +139,20 @@ class RegisterView(APIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        print("\n=== DEBUG LOGIN ATTEMPT ===")
+        print("Données reçues:", request.data)
+        print("Email reçu:", request.data.get('email'))
+        print("Password reçu:", bool(request.data.get('password')))  # Pour la sécurité, on affiche juste si présent
+        
+        try:
+            response = super().post(request, *args, **kwargs)
+            print("Login réussi!")
+            return response
+        except Exception as e:
+            print(f"Échec de login: {str(e)}")
+            return Response(
+                {'detail': 'Identifiants invalides'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
