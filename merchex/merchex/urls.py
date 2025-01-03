@@ -13,8 +13,10 @@ from listings.views import UserViewSet, UserPointsViewSet
 
 user = DefaultRouter()
 user.register(r'users', UserViewSet)
-router = DefaultRouter()
+router= DefaultRouter()
 router.register(r'points', UserPointsViewSet, basename='points')
+
+print(router.urls)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

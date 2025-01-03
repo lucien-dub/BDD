@@ -10,6 +10,7 @@ from serializers.serializers import MatchSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from listings.models import UserPoints, PointTransaction
 
+from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import APIView
@@ -40,13 +41,19 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
-
 class UserPointsViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = UserPointsSerializer
 
     def get_queryset(self):
         return UserPoints.objects.filter(user=self.request.user)
+
+    @action(detail=False, methods=['GET'], url_path='all_users_points', permission_classes=[permissions.AllowAny])
+    def all_users_points(self, request):
+        # Retourne tous les utilisateurs et leurs points
+        user_points = UserPoints.objects.all()
+        serializer = self.get_serializer(user_points, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['GET'])
     def my_points(self, request):

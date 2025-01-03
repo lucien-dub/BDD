@@ -23,7 +23,6 @@ class MatchSerializer(ModelSerializer):
 
 
 class UserPointsSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
         model = UserPoints

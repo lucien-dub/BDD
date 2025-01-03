@@ -27,8 +27,6 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-AUTH_USER_MODEL = 'listings.User'
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -47,17 +45,36 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',   
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',  
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -76,6 +93,10 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8100",
+    "http://127.0.0.1:8100",
+]
 
 from datetime import timedelta
 SIMPLE_JWT = {
@@ -83,12 +104,6 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
 }
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8100",  # Pour Ionic en développement
-    "http://192.168.1.101:8100",
-    "http://127.0.0.1:8100",
-]
 
 
 ROOT_URLCONF = 'merchex.urls'
@@ -121,6 +136,7 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
 
 
 # Password validation
