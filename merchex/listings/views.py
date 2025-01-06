@@ -42,13 +42,9 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
 class UserPointsViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
     serializer_class = UserPointsSerializer
 
-    def get_queryset(self):
-        return UserPoints.objects.filter(user=self.request.user)
-
-    @action(detail=False, methods=['GET'], url_path='all_users_points', permission_classes=[permissions.AllowAny])
+    @action(detail=False, methods=['GET'], permission_classes=[permissions.AllowAny])
     def all_users_points(self, request):
         # Retourne tous les utilisateurs et leurs points
         user_points = UserPoints.objects.all()
