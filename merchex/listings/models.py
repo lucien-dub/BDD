@@ -56,6 +56,11 @@ class UserPoints(models.Model):
     total_points = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
 
+
+    @property
+    def username(self):
+        return self.user.username
+
     def __str__(self):
         return f"{self.user.username} - {self.total_points} points"
 

@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.contrib.auth.models import User
@@ -42,11 +42,14 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
 class UsersPointsAPIView(APIView):
- 
+
     def get(self, *args, **kwargs):
-        points = UserPoints.objects.all()
-        serializer = UserPointsSerializer(points, many=True)
-        return Response(serializer.data)
+        users_points = UserPoints.objects.all()  # Récupère tous les UserPoints
+        return JsonResponse([
+            {'username': up.user.username, 'total_points': up.total_points} 
+            for up in users_points
+        ], safe=False)
+
     
 
 class RegisterView(APIView):
