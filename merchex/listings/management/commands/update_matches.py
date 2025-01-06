@@ -20,7 +20,9 @@ def extraire_poule(texte):
 
 def calculer_cote(match):
     """Calcul de la cote pour le match."""
-    return round(1 / (1.01 + match.id), 2)
+    # Si l'ID n'est pas encore défini, utiliser une valeur par défaut
+    match_id = match.id if match.id is not None else 0
+    return round(1 / (1.01 + match_id), 2)
 
 def creer_cotes_pour_match(match):
     """Crée les cotes pour un match spécifique"""
@@ -42,7 +44,11 @@ def export_excel_website(url: str, df_original, name_file: str):
                 file.write(response.content)
             print("File downloaded successfully!")
             
+            # Lire le fichier Excel
             df_new = pd.read_excel(name_file, engine='openpyxl')
+            
+            # Supprimer les colonnes en double
+            df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
             if df_original.equals(pd.DataFrame(df_new)):
                 print("Les fichiers sont identiques.")
@@ -71,6 +77,9 @@ def import_matches_from_url(url, current_df=None):
     
     if changed:
         try:
+            print("Colonnes disponibles dans le fichier Excel:")
+            print(df.columns.tolist())
+            
             with transaction.atomic():
                 for index, row in df.iterrows():
                     date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
@@ -92,12 +101,16 @@ def import_matches_from_url(url, current_df=None):
                     
                     if created:
                         print(f"Nouveau match créé: {match}")
+                        # S'assurer que le match est sauvegardé avant de créer les cotes
+                        match.save()  # Force la sauvegarde et la génération de l'ID
                         creer_cotes_pour_match(match)
                     else:
                         print(f"Match mis à jour: {match}")
                         
         except Exception as e:
             print(f"Erreur lors de l'import: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
             return current_df
             
         return df
@@ -109,7 +122,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('Début de la mise à jour des matchs...')
         
-        url = 'https://sportco.abyss-clients.com/rencontres/planning/export'
+        url = 'https://sportco.abyss-clients.com/rencontres/resultats/export'
         current_df = pd.DataFrame()
         
         try:
