@@ -1,9 +1,35 @@
+from django.core.management.base import BaseCommand
 import pandas as pd
 import requests
 from django.db import transaction
 from listings.models import Match, Cote
 import re
 from datetime import datetime
+
+def extraire_sport(texte):
+    match = re.search(r'-\s*(.*?)\s*\(', texte)
+    return match.group(1).strip() if match else ''
+
+def extraire_niveau(texte):
+    match = re.search(r'\((.*?)\)', texte)
+    return match.group(1).strip() if match else ''
+
+def extraire_poule(texte):
+    match = re.search(r'(\w{2})(?= -)',texte)
+    return match.group(1).strip() if match else ''
+
+def calculer_cote(match):
+    """Calcul de la cote pour le match."""
+    return round(1 / (1.01 + match.id), 2)
+
+def creer_cotes_pour_match(match):
+    """Crée les cotes pour un match spécifique"""
+    cotes = [
+        Cote(match=match, type_cote=f"victoire {match.equipe1}", valeur=calculer_cote(match)),
+        Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
+        Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
+    ]
+    Cote.objects.bulk_create(cotes)
 
 def export_excel_website(url: str, df_original, name_file: str):
     """
@@ -38,7 +64,7 @@ def import_matches_from_url(url, current_df=None):
     Fonction principale qui gère l'export et l'import des matchs
     """
     if current_df is None:
-        current_df = pd.DataFrame()  # DataFrame vide au début
+        current_df = pd.DataFrame()
         
     name_file = 'Export_Resultats.xlsx'
     df, changed = export_excel_website(url, current_df, name_file)
@@ -47,7 +73,6 @@ def import_matches_from_url(url, current_df=None):
         try:
             with transaction.atomic():
                 for index, row in df.iterrows():
-                    # Vérifier si le match existe déjà
                     date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
                                               format='%d/%m/%Y %H:%M')
                     
@@ -67,7 +92,6 @@ def import_matches_from_url(url, current_df=None):
                     
                     if created:
                         print(f"Nouveau match créé: {match}")
-                        # Créer les cotes pour le nouveau match
                         creer_cotes_pour_match(match)
                     else:
                         print(f"Match mis à jour: {match}")
@@ -79,27 +103,17 @@ def import_matches_from_url(url, current_df=None):
         return df
     return current_df
 
-def creer_cotes_pour_match(match):
-    """Crée les cotes pour un match spécifique"""
-    cotes = [
-        Cote(match=match, type_cote=f"victoire {match.equipe1}", 
-             valeur=calculer_cote(match)),
-        Cote(match=match, type_cote=f"victoire {match.equipe2}", 
-             valeur=1 + calculer_cote(match)),
-        Cote(match=match, type_cote="Nul", 
-             valeur=2 + calculer_cote(match))
-    ]
-    Cote.objects.bulk_create(cotes)
+class Command(BaseCommand):
+    help = 'Met à jour les matchs depuis le site FFSU'
 
-if __name__ == "__main__":
-    import os
-    import django
-    
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'merchex.settings')
-    django.setup()
-    
-    url = 'https://sportco.abyss-clients.com/rencontres/planning/export'
-    current_df = pd.DataFrame()  # DataFrame initial vide
-    
-    # Premier import
-    current_df = import_matches_from_url(url, current_df)
+    def handle(self, *args, **kwargs):
+        self.stdout.write('Début de la mise à jour des matchs...')
+        
+        url = 'https://sportco.abyss-clients.com/rencontres/planning/export'
+        current_df = pd.DataFrame()
+        
+        try:
+            current_df = import_matches_from_url(url, current_df)
+            self.stdout.write(self.style.SUCCESS('Mise à jour terminée avec succès !'))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour : {str(e)}'))

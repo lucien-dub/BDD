@@ -1,21 +1,11 @@
-# models.py
 from django.db import models
 import pandas as pd
 from datetime import datetime
 from django.db import transaction
 import re
 from django.core.validators import MinValueValidator
-from django.apps import apps
 from listings.models import Match, Cote
 
-current_id = 0
-
-def get_next_id():
-    global current_id
-    current_id += 1
-    return current_id
-
-# extraction des différentes données dans la chaine de caractère avec regex
 def extraire_sport(texte):
     match = re.search(r'-\s*(.*?)\s*\(', texte)
     return match.group(1).strip() if match else ''
@@ -30,8 +20,9 @@ def extraire_poule(texte):
 
 def import_matches(file_path):
     # Lire le fichier
-    df = pd.read_excel(file_path, engine = 'openpyxl')
-
+    df = pd.read_excel(file_path, engine='openpyxl')
+    matches_crees = []
+    
     try:
         with transaction.atomic():
             for index, row in df.iterrows():
@@ -41,7 +32,6 @@ def import_matches(file_path):
                 
                 # Création du match
                 match = Match.objects.create(
-                    id = get_next_id(),
                     sport=extraire_sport(row['Poule']),
                     date=date_heure.date(),
                     heure=date_heure.time(),
@@ -52,11 +42,14 @@ def import_matches(file_path):
                     niveau=extraire_niveau(row['Poule']),
                     poule=extraire_poule(row['Poule'])
                 )
+                matches_crees.append(match)
                 print(f"Match importé: {match}")
+            
+            # Affecter les cotes après avoir créé tous les matches
+            affectation_cote(matches_crees)
                 
     except Exception as e:
         print(f"Erreur lors de l'import: {str(e)}")
-
 
 def calculer_cote(match):
     """Calcul de la cote pour le match."""
@@ -67,18 +60,20 @@ def affectation_cote(matches):
     cotes_a_creer = []
     
     for match in matches:
-        # Créer les trois types de cotes pour chaque match
         cotes_a_creer.extend([
             Cote(match=match, type_cote=f"victoire {match.equipe1}", valeur=calculer_cote(match)),
             Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
             Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
         ])
     
-    # Utiliser bulk_create pour insérer tous les objets en une seule requête
     Cote.objects.bulk_create(cotes_a_creer)
 
-
-# Exemple d'utilisation
 if __name__ == "__main__":
-    file_path = 'Export_Resultats_20241117.csv'  # Assurez-vous que le fichier est au format CSV
+    import os
+    import django
+    
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'merchex.settings')
+    django.setup()
+    
+    file_path = 'Export_Resultats_20241117.xlsx'
     import_matches(file_path)
