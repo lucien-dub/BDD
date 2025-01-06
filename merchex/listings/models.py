@@ -27,8 +27,8 @@ class Match(models.Model):
     sport = models.CharField(max_length=50)
     date = models.DateField()
     heure = models.TimeField()
-    equipe1 = models.CharField(max_length=100)
-    equipe2 = models.CharField(max_length=100)
+    equipe1 = models.CharField(max_length=200)
+    equipe2 = models.CharField(max_length=200)
     score1 = models.IntegerField()  
     score2 = models.IntegerField()
     niveau = models.CharField(max_length=50)
@@ -36,6 +36,7 @@ class Match(models.Model):
 
     class Meta:
         db_table = 'creation_bdd_match'
+        unique_together = ('sport', 'date', 'heure', 'equipe1', 'equipe2')
     
     def __str__(self):
         return f"{self.equipe1} vs {self.equipe2} - {self.date}"

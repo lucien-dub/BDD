@@ -5,49 +5,61 @@ from django.db import transaction
 from listings.models import Match, Cote
 import re
 from datetime import datetime
+from django.db.models import Max
 
+
+# Fonctions utilitaires pour extraire des informations spécifiques
 def extraire_sport(texte):
     match = re.search(r'-\s*(.*?)\s*\(', texte)
     return match.group(1).strip() if match else ''
+
 
 def extraire_niveau(texte):
     match = re.search(r'\((.*?)\)', texte)
     return match.group(1).strip() if match else ''
 
+
 def extraire_poule(texte):
-    match = re.search(r'(\w{2})(?= -)',texte)
+    match = re.search(r'(\w{2})(?= -)', texte)
     return match.group(1).strip() if match else ''
 
+
 def calculer_cote(match):
-    """Calcul de la cote pour le match."""
-    # Si l'ID n'est pas encore défini, utiliser une valeur par défaut
-    match_id = match.id if match.id is not None else 0
+    """Calcul de la cote pour un match spécifique."""
+    match_id = match.id if match.id else 0
     return round(1 / (1.01 + match_id), 2)
 
+
 def creer_cotes_pour_match(match):
-    """Crée les cotes pour un match spécifique"""
+    """Crée les cotes pour un match spécifique."""
+    if match.id is None:
+        raise ValueError("Le match doit être sauvegardé avant de créer les cotes.")
+    
     cotes = [
         Cote(match=match, type_cote=f"victoire {match.equipe1}", valeur=calculer_cote(match)),
         Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
         Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
     ]
+    # Utilisation de bulk_create pour insérer les cotes en une seule requête
     Cote.objects.bulk_create(cotes)
 
+
+# Fonction pour télécharger et comparer les fichiers Excel
 def export_excel_website(url: str, df_original, name_file: str):
     """
-    Fonction permettant d'aller faire une requete POST pour exporter le fichier excel planning sur le site de la FFSU
+    Télécharge le fichier Excel depuis le site web et compare avec l'ancien fichier.
     """
     try:
         response = requests.post(url)
         if response.status_code == 200:
             with open(name_file, 'wb') as file:
                 file.write(response.content)
-            print("File downloaded successfully!")
+            print("Fichier téléchargé avec succès !")
             
-            # Lire le fichier Excel
+            # Lecture du fichier Excel
             df_new = pd.read_excel(name_file, engine='openpyxl')
             
-            # Supprimer les colonnes en double
+            # Supprimer les colonnes dupliquées
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
             if df_original.equals(pd.DataFrame(df_new)):
@@ -56,19 +68,17 @@ def export_excel_website(url: str, df_original, name_file: str):
             else:
                 print("Les fichiers sont différents.")
                 return pd.DataFrame(df_new), True
-                
         else:
-            print(f"Failed to download file. Status code: {response.status_code}")
+            print(f"Échec du téléchargement du fichier. Code de statut : {response.status_code}")
             return df_original, False
             
     except Exception as e:
-        print(f"Erreur lors de l'export: {str(e)}")
+        print(f"Erreur lors de l'export : {str(e)}")
         return df_original, False
 
+
+# Fonction principale pour importer les matchs
 def import_matches_from_url(url, current_df=None):
-    """
-    Fonction principale qui gère l'export et l'import des matchs
-    """
     if current_df is None:
         current_df = pd.DataFrame()
         
@@ -77,45 +87,58 @@ def import_matches_from_url(url, current_df=None):
     
     if changed:
         try:
-            print("Colonnes disponibles dans le fichier Excel:")
-            print(df.columns.tolist())
-            
             with transaction.atomic():
+                # Générer un ID unique pour chaque match
+                max_id = Match.objects.all().aggregate(Max('id'))['id__max'] or 0
+                current_id = max_id
+                
                 for index, row in df.iterrows():
                     date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
                                               format='%d/%m/%Y %H:%M')
                     
-                    match, created = Match.objects.update_or_create(
+                    # Vérifier si le match existe déjà
+                    existing_match = Match.objects.filter(
                         sport=extraire_sport(row['Poule']),
                         date=date_heure.date(),
                         heure=date_heure.time(),
                         equipe1=row['Équipe 1'].strip(),
-                        equipe2=row['Équipe 2'].strip(),
-                        defaults={
-                            'score1': int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
-                            'score2': int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
-                            'niveau': extraire_niveau(row['Poule']),
-                            'poule': extraire_poule(row['Poule'])
-                        }
-                    )
+                        equipe2=row['Équipe 2'].strip()
+                    ).first()
                     
-                    if created:
-                        print(f"Nouveau match créé: {match}")
-                        # S'assurer que le match est sauvegardé avant de créer les cotes
-                        match.save()  # Force la sauvegarde et la génération de l'ID
-                        creer_cotes_pour_match(match)
+                    if existing_match:
+                        # Mettre à jour le match existant
+                        existing_match.score1 = int(row['Score 1']) if pd.notna(row['Score 1']) else 0
+                        existing_match.score2 = int(row['Score 2']) if pd.notna(row['Score 2']) else 0
+                        existing_match.niveau = extraire_niveau(row['Poule'])
+                        existing_match.poule = extraire_poule(row['Poule'])
+                        existing_match.save()
+                        print(f"Match mis à jour: {existing_match}")
                     else:
-                        print(f"Match mis à jour: {match}")
+                        # Créer un nouveau match avec un ID unique
+                        current_id += 1
+                        match = Match.objects.create(
+                            id=current_id,
+                            sport=extraire_sport(row['Poule']),
+                            date=date_heure.date(),
+                            heure=date_heure.time(),
+                            equipe1=row['Équipe 1'].strip(),
+                            equipe2=row['Équipe 2'].strip(),
+                            score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
+                            score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
+                            niveau=extraire_niveau(row['Poule']),
+                            poule=extraire_poule(row['Poule'])
+                        )
+                        print(f"Nouveau match créé: {match}")
+                        creer_cotes_pour_match(match)
                         
         except Exception as e:
             print(f"Erreur lors de l'import: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
             return current_df
             
         return df
     return current_df
 
+# Commande Django pour exécuter le script
 class Command(BaseCommand):
     help = 'Met à jour les matchs depuis le site FFSU'
 
