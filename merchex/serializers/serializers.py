@@ -26,7 +26,7 @@ class UserPointsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserPoints
-        fields = ['username', 'total_points', 'last_updated']
+        fields = ['user', 'total_points', 'last_updated']
 
 class PointTransactionSerializer(serializers.ModelSerializer):
     class Meta:

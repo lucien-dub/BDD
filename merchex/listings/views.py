@@ -41,89 +41,11 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
-class UserPointsViewSet(viewsets.ModelViewSet):
-    serializer_class = UserPointsSerializer
-
-    @action(detail=False, methods=['GET'], permission_classes=[permissions.AllowAny])
-    def all_users_points(self, request):
-        # Retourne tous les utilisateurs et leurs points
-        user_points = UserPoints.objects.all()
-        serializer = self.get_serializer(user_points, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['GET'])
-    def my_points(self, request):
-        points = UserPoints.get_or_create_points(request.user)
-        serializer = self.get_serializer(points)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['POST'])
-    @transaction.atomic
-    def add_points(self, request):
-        points_to_add = request.data.get('points', 0)
-        reason = request.data.get('reason', 'Points gagnés')
-
-        if points_to_add <= 0:
-            return Response(
-                {'error': 'Le nombre de points doit être positif'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user_points = UserPoints.get_or_create_points(request.user)
-        user_points.total_points += points_to_add
-        user_points.save()
-
-        # Enregistrer la transaction
-        PointTransaction.objects.create(
-            user=request.user,
-            points=points_to_add,
-            transaction_type=PointTransaction.EARN,
-            reason=reason
-        )
-
-        serializer = self.get_serializer(user_points)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['POST'])
-    @transaction.atomic
-    def spend_points(self, request):
-        points_to_spend = request.data.get('points', 0)
-        reason = request.data.get('reason', 'Points dépensés')
-
-        if points_to_spend <= 0:
-            return Response(
-                {'error': 'Le nombre de points doit être positif'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user_points = UserPoints.get_or_create_points(request.user)
-
-        if user_points.total_points < points_to_spend:
-            return Response(
-                {'error': 'Points insuffisants'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        user_points.total_points -= points_to_spend
-        user_points.save()
-
-        # Enregistrer la transaction
-        PointTransaction.objects.create(
-            user=request.user,
-            points=points_to_spend,
-            transaction_type=PointTransaction.SPEND,
-            reason=reason
-        )
-
-        serializer = self.get_serializer(user_points)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['GET'])
-    def transaction_history(self, request):
-        transactions = PointTransaction.objects.filter(
-            user=request.user
-        ).order_by('-timestamp')
-        serializer = PointTransactionSerializer(transactions, many=True)
+class UsersPointsAPIView(APIView):
+ 
+    def get(self, *args, **kwargs):
+        points = UserPoints.objects.all()
+        serializer = UserPointsSerializer(points, many=True)
         return Response(serializer.data)
     
 
