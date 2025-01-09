@@ -9,7 +9,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from listings.views import RegisterView, CustomTokenObtainPairView
 
 from listings.views import MatchsAPIView
+<<<<<<< Updated upstream
 from listings.views import UserViewSet, UsersPointsAPIView, UpdateCotesView
+=======
+from listings.views import UserViewSet, UsersPointsAPIView
+from listings.views import SearchMatchesAPIView
+>>>>>>> Stashed changes
 
 user = DefaultRouter()
 user.register(r'users', UserViewSet)
@@ -30,4 +35,6 @@ urlpatterns = [
     path('api/points/', UsersPointsAPIView.as_view()),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+
+    path('api/search-matches/', SearchMatchesAPIView.as_view(), name='search-matches'),
 ]
