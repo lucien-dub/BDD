@@ -3,9 +3,12 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.contrib.auth.models import User
+from django.utils import timezone
+from django.views import View
 
 
 from background.actualisation_bdd import Match
+from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from listings.models import UserPoints, PointTransaction
@@ -50,7 +53,28 @@ class UsersPointsAPIView(APIView):
             for up in users_points
         ], safe=False)
 
-    
+class UpdateCotesView(View):
+    def get(self, request):
+        today = timezone.now().date()
+        matches = Match.objects.filter(date__gte=today)
+        results = []
+        
+        for match in matches:
+            try:
+                cote1, coteN, cote2 = calculer_cotes(match.id)
+                results.append({
+                    'match_id': match.id,
+                    'status': 'success',
+                    'cotes': [cote1, coteN, cote2]
+                })
+            except Exception as e:
+                results.append({
+                    'match_id': match.id,
+                    'status': 'error',
+                    'error': str(e)
+                })
+        
+        return JsonResponse({'results': results})
 
 class RegisterView(APIView):
     permission_classes = (permissions.AllowAny,)

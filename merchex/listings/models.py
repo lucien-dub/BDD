@@ -43,11 +43,12 @@ class Match(models.Model):
     
 class Cote(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="cotes")
-    type_cote = models.CharField(max_length=50)  # Par exemple, "victoire", "nul", etc.
-    valeur = models.FloatField(validators=[MinValueValidator(1.01)])
+    coteN = models.FloatField(max_length=5, default = 1.1)
+    cote1 = models.FloatField(max_length=5, default = 1.1)
+    cote2 = models.FloatField(max_length=5, default = 1.1)
 
     def __str__(self):
-        return f"Cote {self.type_cote} pour {self.match}: {self.valeur}"
+        return f"Cote {self.match} {self.cote1}: {self.cote2}"
 
 
 

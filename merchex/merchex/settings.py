@@ -41,7 +41,8 @@ INSTALLED_APPS = [
     'background_task',
     'creation_bdd',
     'rest_framework_simplejwt',
-    'corsheaders'
+    'corsheaders',
+    'django_crontab'
 ]
 
 MIDDLEWARE = [
@@ -56,6 +57,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -107,6 +109,9 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
 }
 
+CRONJOBS = [
+    ('0 0 * * *', 'votre_app.cron.update_all_cotes')  # Minuit chaque jour
+]
 
 ROOT_URLCONF = 'merchex.urls'
 
@@ -138,7 +143,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 
 # Password validation

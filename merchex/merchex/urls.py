@@ -9,7 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from listings.views import RegisterView, CustomTokenObtainPairView
 
 from listings.views import MatchsAPIView
-from listings.views import UserViewSet, UsersPointsAPIView
+from listings.views import UserViewSet, UsersPointsAPIView, UpdateCotesView
 
 user = DefaultRouter()
 user.register(r'users', UserViewSet)
@@ -18,6 +18,7 @@ user.register(r'users', UserViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('about-us/', views.about),
+    path('update-cotes/', UpdateCotesView.as_view(), name='update-cotes'),
 
     path('api-auth/', include('rest_framework.urls')),
     path('api/matchs/', MatchsAPIView.as_view()),
