@@ -1,19 +1,17 @@
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, F
 from datetime import datetime, timedelta
+from django.utils import timezone
 import math
+from listings.models import Match, Cote
 
 def calculer_cotes(match_id):
     """
-    Calcule les cotes pour un match donné en se basant sur:
-    - Historique des résultats récents
-    - Niveau des équipes
-    - Performance dans la poule
+    Calcule les cotes pour un match donné basé sur l'historique
     """
     try:
         match = Match.objects.get(id=match_id)
         date_limite = match.date - timedelta(days=365)
         
-        # Récupérer l'historique des matches pour les deux équipes
         historique = Match.objects.filter(
             date__gte=date_limite,
             date__lt=match.date,
@@ -23,38 +21,38 @@ def calculer_cotes(match_id):
         
         # Statistiques équipe 1
         stats_eq1 = historique.filter(equipe1=match.equipe1)
-        victoires_eq1 = stats_eq1.filter(score1__gt='score2').count()
+        victoires_eq1 = stats_eq1.filter(score1__gt=F('score2')).count()
         matches_eq1 = stats_eq1.count()
         
         # Statistiques équipe 2
         stats_eq2 = historique.filter(equipe1=match.equipe2)
-        victoires_eq2 = stats_eq2.filter(score1__gt='score2').count()
+        victoires_eq2 = stats_eq2.filter(score1__gt=F('score2')).count()
         matches_eq2 = stats_eq2.count()
         
-        # Calcul des probabilités de base
+        # Calcul des probabilités
         if matches_eq1 > 0 and matches_eq2 > 0:
             prob_eq1 = victoires_eq1 / matches_eq1
             prob_eq2 = victoires_eq2 / matches_eq2
             prob_nul = 1 - (prob_eq1 + prob_eq2)
             
-            # Ajustement pour garantir des probabilités valides
             total_prob = prob_eq1 + prob_eq2 + prob_nul
-            prob_eq1 /= total_prob
-            prob_eq2 /= total_prob
-            prob_nul /= total_prob
+            if total_prob > 0:
+                prob_eq1 /= total_prob
+                prob_eq2 /= total_prob
+                prob_nul /= total_prob
             
-            # Conversion en cotes (avec une marge de 10%)
+            # Conversion en cotes (marge 10%)
             marge = 1.1
-            cote1 = round(marge / prob_eq1, 2) if prob_eq1 > 0 else 3.0
-            cote2 = round(marge / prob_eq2, 2) if prob_eq2 > 0 else 3.0
-            coteN = round(marge / prob_nul, 2) if prob_nul > 0 else 3.0
+            cote1 = round(marge / max(prob_eq1, 0.1), 2)
+            cote2 = round(marge / max(prob_eq2, 0.1), 2)
+            coteN = round(marge / max(prob_nul, 0.1), 2)
         else:
-            # Cotes par défaut si pas assez d'historique
+            # Cotes par défaut
             cote1 = cote2 = 2.5
             coteN = 3.0
         
-        # Création ou mise à jour des cotes
-        Cote.objects.update_or_create(
+        # Mise à jour ou création
+        cote, created = Cote.objects.update_or_create(
             match=match,
             defaults={
                 'cote1': cote1,
@@ -63,7 +61,7 @@ def calculer_cotes(match_id):
             }
         )
         
-        return cote1, coteN, cote2
+        return cote.cote1, cote.coteN, cote.cote2
         
     except Match.DoesNotExist:
         raise ValueError(f"Match avec ID {match_id} non trouvé")

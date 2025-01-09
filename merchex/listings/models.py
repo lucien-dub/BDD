@@ -48,7 +48,7 @@ class Cote(models.Model):
     cote2 = models.FloatField(max_length=5, default = 1.1)
 
     def __str__(self):
-        return f"Cote {self.match} {self.cote1}: {self.cote2}"
+        return f"Cote pour {self.match},équipe1: {self.cote1}, équipe2: {self.cote2}, match nul :{self.coteN}"
 
 
 

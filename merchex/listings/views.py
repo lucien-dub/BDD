@@ -26,7 +26,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer
 
-
+import logging
 
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')
@@ -53,11 +53,15 @@ class UsersPointsAPIView(APIView):
             for up in users_points
         ], safe=False)
 
+logger = logging.getLogger(__name__)
+
 class UpdateCotesView(View):
     def get(self, request):
         today = timezone.now().date()
         matches = Match.objects.filter(date__gte=today)
         results = []
+        success_count = 0
+        error_count = 0
         
         for match in matches:
             try:
@@ -65,16 +69,39 @@ class UpdateCotesView(View):
                 results.append({
                     'match_id': match.id,
                     'status': 'success',
-                    'cotes': [cote1, coteN, cote2]
+                    'equipe1': match.equipe1,
+                    'equipe2': match.equipe2,
+                    'date': match.date.strftime('%Y-%m-%d'),
+                    'sport': match.sport,
+                    'cotes': {
+                        'cote1': cote1,
+                        'coteN': coteN,
+                        'cote2': cote2
+                    }
                 })
+                success_count += 1
             except Exception as e:
+                error_message = str(e)
+                logger.error(f"Erreur lors du calcul des cotes pour le match {match.id}: {error_message}")
                 results.append({
                     'match_id': match.id,
                     'status': 'error',
-                    'error': str(e)
+                    'equipe1': match.equipe1,
+                    'equipe2': match.equipe2,
+                    'date': match.date.strftime('%Y-%m-%d'),
+                    'error': error_message
                 })
+                error_count += 1
         
-        return JsonResponse({'results': results})
+        return JsonResponse({
+            'results': results,
+            'summary': {
+                'total_matches': len(matches),
+                'success_count': success_count,
+                'error_count': error_count,
+                'date_execution': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        })
 
 class RegisterView(APIView):
     permission_classes = (permissions.AllowAny,)
