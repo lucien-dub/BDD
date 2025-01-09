@@ -26,13 +26,9 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer
 
-<<<<<<< Updated upstream
 import logging
-=======
 from django.db.models import Q
 from django.core.paginator import Paginator
-
->>>>>>> Stashed changes
 
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')

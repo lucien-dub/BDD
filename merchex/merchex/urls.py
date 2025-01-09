@@ -9,12 +9,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from listings.views import RegisterView, CustomTokenObtainPairView
 
 from listings.views import MatchsAPIView
-<<<<<<< Updated upstream
 from listings.views import UserViewSet, UsersPointsAPIView, UpdateCotesView
-=======
-from listings.views import UserViewSet, UsersPointsAPIView
 from listings.views import SearchMatchesAPIView
->>>>>>> Stashed changes
 
 user = DefaultRouter()
 user.register(r'users', UserViewSet)
