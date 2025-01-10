@@ -7,7 +7,7 @@ from rest_framework import status
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User
+from listings.models import UserPoints, PointTransaction, User, Cote
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -21,6 +21,11 @@ class MatchSerializer(ModelSerializer):
         model = Match
         fields = ['sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2', 'heure']
 
+class CoteSerializer(ModelSerializer):
+ 
+    class Meta:
+        model = Cote
+        fields = ['match','cote1','cote2','coteN']
 
 class UserPointsSerializer(serializers.ModelSerializer):
 

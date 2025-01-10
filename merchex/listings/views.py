@@ -9,9 +9,9 @@ from django.views import View
 
 from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
-from serializers.serializers import MatchSerializer
+from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from listings.models import UserPoints, PointTransaction
+from listings.models import UserPoints, PointTransaction, Cote
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -38,6 +38,13 @@ class MatchsAPIView(APIView):
     def get(self, *args, **kwargs):
         match = Match.objects.all()
         serializer = MatchSerializer(match, many=True)
+        return Response(serializer.data)
+
+class CotesAPIView(APIView):
+
+    def get(self, *args, **kwargs):
+        cote = Cote.objects.all()
+        serializer = CoteSerializer(cote, many=True)
         return Response(serializer.data)
 
 class UserViewSet(viewsets.ModelViewSet):
