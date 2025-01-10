@@ -27,6 +27,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer
 
 import logging
+from django.db.models import Q
+from django.core.paginator import Paginator
 
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')
@@ -141,4 +143,46 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             return Response(
                 {'detail': 'Identifiants invalides'},
                 status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+class SearchMatchesAPIView(APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def get(self, request):
+        try:
+            print("=== DEBUG SEARCH ===")
+            query = request.GET.get('query', '')
+            print(f"Recherche reçue : {query}")
+
+            matches = Match.objects.all()
+            
+            if query:
+                matches = matches.filter(
+                    Q(sport__icontains=query) |
+                    Q(equipe1__icontains=query) |
+                    Q(equipe2__icontains=query) |
+                    Q(niveau__icontains=query) |
+                    Q(poule__icontains=query)
+                ).order_by('-date', '-heure')
+
+                print(f"Nombre de matches trouvés : {matches.count()}")
+
+                serializer = MatchSerializer(matches, many=True)
+                return Response({
+                    'results': serializer.data,
+                    'count': matches.count()
+                })
+
+            return Response({
+                'results': [],
+                'message': 'Aucun terme de recherche fourni'
+            })
+
+        except Exception as e:
+            print(f"Erreur détaillée : {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
