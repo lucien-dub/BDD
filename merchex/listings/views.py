@@ -11,7 +11,7 @@ from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from listings.models import UserPoints, PointTransaction, Cote
+from listings.models import UserPoints, PointTransaction, Cote, Pari
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -24,7 +24,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer
+from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer
 
 import logging
 from django.db.models import Q
@@ -35,6 +35,17 @@ def about(request):
 
 
 """pour l'API"""
+class PariViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PariListSerializer
+        return PariSerializer
+    
+    def get_queryset(self):
+        return Pari.objects.filter(user=self.request.user)
+    
 class MatchsAPIView(APIView):
  
     def get(self, *args, **kwargs):

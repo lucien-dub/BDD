@@ -6,7 +6,7 @@ from django.conf.urls import include
 
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView # type: ignore
-from listings.views import RegisterView, CustomTokenObtainPairView
+from listings.views import RegisterView, CustomTokenObtainPairView, PariViewSet
 
 from listings.views import MatchsAPIView, CotesAPIView
 from listings.views import UserViewSet, UsersPointsAPIView, UpdateCotesView
@@ -30,8 +30,20 @@ urlpatterns = [
 
     path('api/user/', include(user.urls)),
     path('api/points/', UsersPointsAPIView.as_view()),
+
+    path('api/paris/', PariViewSet.as_view({
+        'get': 'list',
+        'post': 'create'
+    })),
+    path('api/paris/<int:pk>/', PariViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'patch': 'partial_update',
+        'delete': 'destroy'
+    })),
+
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
 
     path('api/search-matches/', SearchMatchesAPIView.as_view(), name='search-matches'),
-]
+    ]
