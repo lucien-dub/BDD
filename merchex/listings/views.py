@@ -36,7 +36,6 @@ def about(request):
 
 """pour l'API"""
 class PariViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
         if self.action == 'list':
