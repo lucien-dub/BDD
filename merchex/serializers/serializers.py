@@ -39,8 +39,8 @@ class PariSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pari
         fields = ['id', 'match', 'match_details', 'selection', 'actif', 
-                 'resultat', 'username', 'cote_selection']
-        read_only_fields = ['match','resultat', 'username', 'cote_selection']
+                 'resultat', 'username', 'cote_selection','mise', 'cote']
+        read_only_fields = ['id','match','resultat', 'username', 'cote_selection']
 
     def get_cote_selection(self, obj):
         try:
