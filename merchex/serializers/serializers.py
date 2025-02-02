@@ -112,7 +112,7 @@ class PariListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pari
         fields = ['id', 'selection', 'actif', 'resultat', 'match_info', 
-                 'cote_selection']
+                 'cote_selection','mise','cote']
         
     def get_match_info(self, obj):
         match = obj.match
