@@ -91,6 +91,14 @@ class Pari(models.Model):
         choices=CHOIX_RESULTAT,
         verbose_name="Pronostic"
     )
+
+    mise = models.IntegerField(
+        default=0
+    )
+
+    cote = models.FloatField(
+        default=1
+    )
     
     actif = models.BooleanField(
         default=True,
