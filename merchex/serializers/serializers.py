@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari, PariGroupe
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -34,13 +34,13 @@ class CoteSerializer(ModelSerializer):
 class PariSerializer(serializers.ModelSerializer):
     match_details = MatchSerializer(source='match', read_only=True)
     cote_selection = serializers.SerializerMethodField()
-    username = serializers.CharField(source='user.username', read_only=True)
+    groupe_id = serializers.PrimaryKeyRelatedField(source='groupe', read_only=True)
     
     class Meta:
         model = Pari
-        fields = ['id', 'match', 'match_details', 'selection', 'actif', 
-                 'resultat', 'username', 'cote_selection','mise', 'cote']
-        read_only_fields = ['id','match','resultat', 'username', 'cote_selection']
+        fields = ['id', 'groupe_id', 'match', 'match_details', 'selection', 
+                 'actif', 'resultat', 'cote_selection', 'cote']
+        read_only_fields = ['id', 'resultat', 'cote_selection']
 
     def get_cote_selection(self, obj):
         try:
@@ -58,7 +58,6 @@ class PariSerializer(serializers.ModelSerializer):
             return None
 
     def validate_match(self, match):
-        # Vérification si le match est terminé (basé sur la date/heure et scores)
         now = timezone.now()
         match_datetime = datetime.combine(match.date, match.heure)
     
@@ -67,7 +66,6 @@ class PariSerializer(serializers.ModelSerializer):
                 "Impossible de parier sur un match qui a déjà commencé"
             )
 
-        # Vérification de l'existence d'une cote
         if not match.cotes.exists():
             raise serializers.ValidationError(
                 "Pas de cotes disponibles pour ce match"
@@ -81,23 +79,23 @@ class PariSerializer(serializers.ModelSerializer):
                 "La sélection doit être '1', '2' ou 'N'"
             )
         return selection
+    
+class PariGroupeSerializer(serializers.ModelSerializer):
+    paris = PariSerializer(many=True, read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    
+    class Meta:
+        model = PariGroupe
+        fields = ['id', 'user', 'mise', 'cote_totale', 
+                 'gains_potentiels', 'date_creation', 'paris']
+        read_only_fields = ['id', 'user', 'username', 'date_creation']
 
-    def validate(self, data):
-        request = self.context.get('request')
-        if request and request.user:
-            # Vérification du pari existant
-            existing_bet = Pari.objects.filter(
-                match=data['match'],
-                user=request.user,
-                actif=True
-            ).exists()
-            
-            if existing_bet and self.instance is None:
-                raise serializers.ValidationError(
-                    "Vous avez déjà un pari actif sur ce match"
-                )
-
-        return data
+    def validate_mise(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "La mise doit être supérieure à 0"
+            )
+        return value
 
     def create(self, validated_data):
         request = self.context.get('request')
@@ -108,11 +106,12 @@ class PariSerializer(serializers.ModelSerializer):
 class PariListSerializer(serializers.ModelSerializer):
     match_info = serializers.SerializerMethodField()
     cote_selection = serializers.SerializerMethodField()
+    groupe_details = serializers.SerializerMethodField()
     
     class Meta:
         model = Pari
-        fields = ['id', 'selection', 'actif', 'resultat', 'match_info', 
-                 'cote_selection','mise','cote']
+        fields = ['id', 'groupe_details', 'selection', 'actif', 'resultat', 
+                 'match_info', 'cote_selection', 'cote']
         
     def get_match_info(self, obj):
         match = obj.match
@@ -139,6 +138,15 @@ class PariListSerializer(serializers.ModelSerializer):
             return cote.cote2
         elif obj.selection == 'N':
             return cote.coteN
+
+    def get_groupe_details(self, obj):
+        groupe = obj.groupe
+        return {
+            'id': groupe.id,
+            'mise': groupe.mise,
+            'cote_totale': groupe.cote_totale,
+            'gains_potentiels': groupe.gains_potentiels
+        }
 
 class UserPointsSerializer(serializers.ModelSerializer):
 

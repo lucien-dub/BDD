@@ -11,7 +11,7 @@ from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from listings.models import UserPoints, PointTransaction, Cote, Pari
+from listings.models import UserPoints, PointTransaction, Cote, Pari, PariGroupe
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -24,7 +24,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer
+from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer, PariGroupeSerializer
 
 import logging
 from django.db.models import Q
@@ -36,6 +36,7 @@ def about(request):
 
 """pour l'API"""
 class PariViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -73,6 +74,29 @@ class UsersPointsAPIView(APIView):
         ], safe=False)
 
 logger = logging.getLogger(__name__)
+
+class PariGroupeViewSet(viewsets.ModelViewSet):
+    serializer_class = PariGroupeSerializer
+    queryset = PariGroupe.objects.all()
+
+    def get_queryset(self):
+        return PariGroupe.objects.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        pari_groupe = serializer.save()
+
+        # Créer les paris individuels
+        paris_data = request.data.get('paris', [])
+        for pari_data in paris_data:
+            pari_data['groupe'] = pari_groupe.id
+            pari_serializer = PariSerializer(data=pari_data)
+            pari_serializer.is_valid(raise_exception=True)
+            pari_serializer.save()
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 class UpdateCotesView(View):
     def get(self, request):
@@ -154,7 +178,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 {'detail': 'Identifiants invalides'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
-        
+
 class SearchMatchesAPIView(APIView):
     permission_classes = (permissions.AllowAny,)
 

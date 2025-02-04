@@ -59,57 +59,31 @@ class Cote(models.Model):
 from django.db import models
 from django.core.exceptions import ValidationError
 
-class Pari(models.Model):
+class PariGroupe(models.Model):
+    """Modèle pour gérer un groupe de paris (panier)"""
+    
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='paris'
-    )
-
-    CHOIX_RESULTAT = [
-        ('1', 'Victoire Équipe 1'),
-        ('N', 'Match Nul'),
-        ('2', 'Victoire Équipe 2')
-    ]
-    
-    CHOIX_STATUT = [
-        ('NaN', 'En attente'),
-        ('1', 'Victoire Équipe 1'),
-        ('N', 'Match Nul'),
-        ('2', 'Victoire Équipe 2')
-    ]
-    
-    match = models.ForeignKey(
-        'Match',
-        on_delete=models.CASCADE,
-        related_name="paris",
-        verbose_name="Match"
+        related_name='groupes_paris'
     )
     
-    selection = models.CharField(
-        max_length=1,
-        choices=CHOIX_RESULTAT,
-        verbose_name="Pronostic"
-    )
-
-    mise = models.IntegerField(
-        default=0
-    )
-
-    cote = models.FloatField(
-        default=1
+    mise = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Mise totale"
     )
     
-    actif = models.BooleanField(
-        default=True,
-        verbose_name="Pari actif"
+    cote_totale = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Cote totale"
     )
     
-    resultat = models.CharField(
-        max_length=3,
-        choices=CHOIX_STATUT,
-        default='NaN',
-        verbose_name="Résultat du pari"
+    gains_potentiels = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Gains potentiels"
     )
     
     date_creation = models.DateTimeField(
@@ -117,26 +91,88 @@ class Pari(models.Model):
         verbose_name="Date de création"
     )
     
-    date_modification = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Dernière modification"
+    class Meta:
+        verbose_name = "Groupe de paris"
+        verbose_name_plural = "Groupes de paris"
+        ordering = ['-date_creation']
+
+    def __str__(self):
+        return f"Groupe de paris #{self.id} - {self.user.username}"
+
+class Pari(models.Model):
+    """Modèle pour les paris individuels"""
+    groupe = models.ForeignKey(
+        PariGroupe,
+        on_delete=models.CASCADE,
+        related_name='paris'
     )
     
+    match = models.ForeignKey(
+        Match,  # Changez de 'Match' à Match
+        on_delete=models.CASCADE,
+        related_name="paris",
+        verbose_name="Match"
+    )
+
+    CHOIX_RESULTAT = [
+        ('1', 'Victoire Équipe 1'),
+        ('N', 'Match Nul'),
+        ('2', 'Victoire Équipe 2')
+    ]
+
+    CHOIX_STATUT = [
+        ('NaN', 'En attente'),
+        ('1', 'Victoire Équipe 1'),
+        ('N', 'Match Nul'),
+        ('2', 'Victoire Équipe 2')
+    ]
+
+    selection = models.CharField(
+        max_length=1,
+        choices=CHOIX_RESULTAT,
+        verbose_name="Pronostic"
+    )
+
+    cote = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=1,
+        verbose_name="Cote"
+    )
+
+    actif = models.BooleanField(
+        default=True,
+        verbose_name="Pari actif"
+    )
+
+    resultat = models.CharField(
+        max_length=3,
+        choices=CHOIX_STATUT,
+        default='NaN',
+        verbose_name="Résultat du pari"
+    )
+
+    date_creation = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Date de création"
+    )
+
+    def clean(self):
+        if self.match and self.match.est_termine and self.actif:
+            raise ValidationError("Impossible de placer un pari sur un match terminé")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = "Pari"
         verbose_name_plural = "Paris"
         ordering = ['-date_creation']
-    
-    def clean(self):
-        if self.match and self.match.est_termine and self.actif:
-            raise ValidationError("Impossible de placer un pari sur un match terminé")
-    
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
-    
+
     def __str__(self):
         return f"Pari {self.get_selection_display()} sur {self.match}"
+
 
 class UserPoints(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='user_points')
