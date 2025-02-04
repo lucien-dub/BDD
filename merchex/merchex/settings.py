@@ -42,7 +42,8 @@ INSTALLED_APPS = [
     'creation_bdd',
     'rest_framework_simplejwt',
     'corsheaders',
-    'django_crontab'
+    'django_crontab',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
