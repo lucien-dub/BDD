@@ -181,37 +181,43 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 class SearchMatchesAPIView(APIView):
     permission_classes = (permissions.AllowAny,)
-
     def get(self, request):
         try:
             print("=== DEBUG SEARCH ===")
             query = request.GET.get('query', '')
             print(f"Recherche reçue : {query}")
-
             matches = Match.objects.all()
-            
+           
             if query:
-                matches = matches.filter(
-                    Q(sport__icontains=query) |
-                    Q(equipe1__icontains=query) |
-                    Q(equipe2__icontains=query) |
-                    Q(niveau__icontains=query) |
-                    Q(poule__icontains=query)
-                ).order_by('-date', '-heure')
-
+                # Séparer les termes de recherche
+                search_terms = query.split()
+                
+                # Créer une requête Q initiale vide
+                combined_query = Q()
+                
+                # Pour chaque terme, ajouter une condition AND
+                for term in search_terms:
+                    term_query = (
+                        Q(sport__icontains=term) |
+                        Q(equipe1__icontains=term) |
+                        Q(equipe2__icontains=term) |
+                        Q(niveau__icontains=term) |
+                        Q(poule__icontains=term)
+                    )
+                    combined_query &= term_query
+                
+                matches = matches.filter(combined_query).order_by('-date', '-heure')
+                
                 print(f"Nombre de matches trouvés : {matches.count()}")
-
                 serializer = MatchSerializer(matches, many=True)
                 return Response({
                     'results': serializer.data,
                     'count': matches.count()
                 })
-
             return Response({
                 'results': [],
                 'message': 'Aucun terme de recherche fourni'
             })
-
         except Exception as e:
             print(f"Erreur détaillée : {str(e)}")
             import traceback
