@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari, PariGroupe
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari #PariGroupe
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -34,11 +34,11 @@ class CoteSerializer(ModelSerializer):
 class PariSerializer(serializers.ModelSerializer):
     match_details = MatchSerializer(source='match', read_only=True)
     cote_selection = serializers.SerializerMethodField()
-    groupe_id = serializers.PrimaryKeyRelatedField(source='groupe', read_only=True)
+    #groupe_id = serializers.PrimaryKeyRelatedField(source='groupe', read_only=True)
     
     class Meta:
         model = Pari
-        fields = ['id', 'groupe_id', 'match', 'match_details', 'selection', 
+        fields = ['id', 'match', 'match_details', 'selection', 
                  'actif', 'resultat', 'cote_selection', 'cote']
         read_only_fields = ['id', 'resultat', 'cote_selection']
 
@@ -79,29 +79,6 @@ class PariSerializer(serializers.ModelSerializer):
                 "La sélection doit être '1', '2' ou 'N'"
             )
         return selection
-    
-class PariGroupeSerializer(serializers.ModelSerializer):
-    paris = PariSerializer(many=True, read_only=True)
-    username = serializers.CharField(source='user.username', read_only=True)
-    
-    class Meta:
-        model = PariGroupe
-        fields = ['id', 'user', 'mise', 'cote_totale', 
-                 'gains_potentiels', 'date_creation', 'paris']
-        read_only_fields = ['id', 'user', 'username', 'date_creation']
-
-    def validate_mise(self, value):
-        if value <= 0:
-            raise serializers.ValidationError(
-                "La mise doit être supérieure à 0"
-            )
-        return value
-
-    def create(self, validated_data):
-        request = self.context.get('request')
-        if request and request.user:
-            validated_data['user'] = request.user
-        return super().create(validated_data)
 
 class PariListSerializer(serializers.ModelSerializer):
     match_info = serializers.SerializerMethodField()

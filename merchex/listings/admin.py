@@ -9,5 +9,6 @@ admin.site.register(Match)
 admin.site.register(UserPoints)
 admin.site.register(Cote)
 admin.site.register(Pari)
+#admin.site.register(PariGroupe)
 # Register your models here.
 

@@ -7,7 +7,6 @@ from listings.views import (
     RegisterView, 
     CustomTokenObtainPairView, 
     PariViewSet,
-    PariGroupeViewSet,  # Nouveau ViewSet
     MatchsAPIView, 
     CotesAPIView,
     UserViewSet, 
@@ -19,7 +18,6 @@ from listings.views import (
 # Configuration des routers
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'paris-groupes', PariGroupeViewSet, basename='pari-groupe')  # Nouveau router
 router.register(r'paris', PariViewSet, basename='pari')
 
 urlpatterns = [
