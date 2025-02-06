@@ -15,15 +15,6 @@ class MyManager(models.Manager):
     def custom_method(self):
         return self.filter(is_active=True)
 
-class Listing(models.Model):
-    name = models.CharField(max_length=100)
-    is_active = models.BooleanField(default=True)
-
-    # Attacher le gestionnaire personnalisé
-    objects = MyManager()
-
-    def __str__(self):
-        return self.name
 
 class Match(models.Model):
     id = models.IntegerField(primary_key=True)
@@ -59,124 +50,46 @@ class Cote(models.Model):
     def __str__(self):
         return f"Cote pour {self.match},équipe1: {self.cote1}, équipe2: {self.cote2}, match nul :{self.coteN}"
 
-
-class GroupePari(models.Model):
-    """Modèle pour tous les types de paris (simples ou combinés)"""
+class Bet(models.Model):
     id = models.BigAutoField(primary_key=True)
-    
-    mise = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        verbose_name="Mise totale"
-    )
-    
-    cote_totale = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=1,
-        verbose_name="Cote totale"
-    )
-    
-    gain_potentiel = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        verbose_name="Gain potentiel"
-    )
-    
-    STATUT_CHOICES = [
-        ('EN_COURS', 'En cours'),
-        ('GAGNE', 'Gagné'),
-        ('PERDU', 'Perdu'),
-        ('ANNULE', 'Annulé')
-    ]
-    
-    statut = models.CharField(
-        max_length=10,
-        choices=STATUT_CHOICES,
-        default='EN_COURS',
-        verbose_name="Statut du groupe"
-    )
-    
-    TYPE_CHOICES = [
-        ('SIMPLE', 'Pari simple'),
-        ('COMBINE', 'Pari combiné')
-    ]
-    
-    type_pari = models.CharField(
-        max_length=7,
-        choices=TYPE_CHOICES,
-        default='SIMPLE',
-        verbose_name="Type de pari"
-    )
-    
-    date_creation = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Date de création"
+    mise = models.FloatField(max_length=6, default=0)
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+    cote_totale = models.FloatField(max_length=5, default=1)
+
+    # Ajout d'une relation avec l'utilisateur
+    user = models.ForeignKey(
+        User,  # Clé étrangère vers l’utilisateur
+        on_delete=models.CASCADE,  # Supprime le pari si l'utilisateur est supprimé
+        related_name="bets",  # Permet d’accéder aux paris d'un utilisateur via user.bets.all()
+        verbose_name="Utilisateur",
+        null = True,
+        blank=True
     )
 
-    def calculer_cote_totale(self):
-        cote_totale = Decimal('1.0')
-        for pari in self.paris.filter(actif=True):
-            cote_totale *= pari.cote
-        return cote_totale.quantize(Decimal('0.01'))
-    
-    def calculer_gain_potentiel(self):
-        return (self.mise * self.cote_totale).quantize(Decimal('0.01'))
-    
-    def mettre_a_jour_statut(self):
-        paris_actifs = self.paris.filter(actif=True)
-        
-        if not paris_actifs.exists():
-            self.statut = 'ANNULE'
-            return
-        
-        if any(pari.resultat == 'NaN' for pari in paris_actifs):
-            self.statut = 'EN_COURS'
-            return
-            
-        if all(pari.selection == pari.resultat for pari in paris_actifs):
-            self.statut = 'GAGNE'
-        else:
-            self.statut = 'PERDU'
-    
-    def clean(self):
-        super().clean()
-        # Vérifie que les paris simples n'ont qu'un seul pari
-        if self.type_pari == 'SIMPLE' and self.paris.count() > 1:
-            raise ValidationError("Un pari simple ne peut contenir qu'un seul pari")
-    
-    def save(self, *args, **kwargs):
-        # Détermine automatiquement le type de pari
-        if self.paris.count() <= 1:
-            self.type_pari = 'SIMPLE'
-        else:
-            self.type_pari = 'COMBINE'
-            
-        self.cote_totale = self.calculer_cote_totale()
-        self.gain_potentiel = self.calculer_gain_potentiel()
-        self.mettre_a_jour_statut()
-        super().save(*args, **kwargs)
-    
+    paris_id = models.JSONField(default=list, verbose_name="IDs des paris")  # Nouveau champ
+    paris_cotes = models.JSONField(default=dict, verbose_name="Cotes des paris")
+
+    actif = models.BooleanField(default=True)
+
     class Meta:
-        verbose_name = "Groupe de paris"
-        verbose_name_plural = "Groupes de paris"
+        verbose_name = "Bets"
+        verbose_name_plural = "Bets"
         ordering = ['-date_creation']
-    
-    def __str__(self):
-        return f"{self.get_type_pari_display()} #{self.id} - {self.statut}"
+
 
 class Pari(models.Model):
     """Modèle pour les paris individuels"""
     id = models.BigAutoField(primary_key=True)
-    
-    groupe = models.ForeignKey(
-        GroupePari,
+
+    bet = models.ForeignKey(
+        Bet,
         on_delete=models.CASCADE,
         related_name="paris",
-        verbose_name="Groupe de paris"
+        verbose_name="Bet",
+        null=True,
+        blank=True
     )
-    
+
     match = models.ForeignKey(
         Match,
         on_delete=models.CASCADE,
@@ -230,15 +143,6 @@ class Pari(models.Model):
     def clean(self):
         if self.match and self.match.est_termine and self.actif:
             raise ValidationError("Impossible de placer un pari sur un match terminé")
-        
-        # Vérifie que le pari respecte le type de son groupe
-        if self.groupe.type_pari == 'SIMPLE' and self.groupe.paris.exclude(pk=self.pk).exists():
-            raise ValidationError("Ce groupe est un pari simple et ne peut contenir qu'un seul pari")
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
-        self.groupe.save()  # Met à jour le groupe après chaque modification du pari
 
     class Meta:
         verbose_name = "Pari"

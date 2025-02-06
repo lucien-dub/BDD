@@ -12,7 +12,8 @@ from listings.views import (
     UserViewSet, 
     UsersPointsAPIView, 
     UpdateCotesView,
-    SearchMatchesAPIView
+    SearchMatchesAPIView,
+    CreateBetView
 )
 
 # Configuration des routers
@@ -43,4 +44,7 @@ urlpatterns = [
     
     # Routes pour les points utilisateurs
     path('api/points/', UsersPointsAPIView.as_view()),
+
+    # Route pour placer un pari
+    path('api/bets/create/', CreateBetView.as_view(), name='create-bet'),
 ]

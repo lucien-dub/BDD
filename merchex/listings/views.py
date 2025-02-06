@@ -11,7 +11,8 @@ from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from listings.models import UserPoints, PointTransaction, Cote, Pari
+from serializers.serializers import PariCreateSerializer, BetCreateSerializer
+from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -24,11 +25,13 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer
+from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer, BetSerializer
 
 import logging
 from django.db.models import Q
 from django.core.paginator import Paginator
+
+import logging
 
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')
@@ -45,6 +48,41 @@ class PariViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return Pari.objects.all()
+    
+logger = logging.getLogger(__name__)
+
+class CreateBetView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    @transaction.atomic
+    def post(self, request):
+        try:
+            logger.info(f"Données reçues: {request.data}")
+            
+            serializer = BetCreateSerializer(data=request.data)
+            
+            if not serializer.is_valid():
+                logger.error(f"Erreurs de validation: {serializer.errors}")
+                return Response({
+                    'error': 'Données invalides',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            bet = serializer.save(user=request.user)
+            
+            return Response({
+                'message': 'Pari créé avec succès',
+                'bet_id': bet.id,
+                'paris_ids': bet.paris_ids,
+                'paris_cotes': bet.paris_cotes
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la création du pari: {str(e)}")
+            return Response({
+                'error': 'Erreur lors de la création du pari',
+                'details': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
     
 class MatchsAPIView(APIView):
  

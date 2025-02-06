@@ -10,12 +10,104 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari #PariGroupe
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+class PariCreateSerializer(serializers.ModelSerializer):
+    match_id = serializers.IntegerField(write_only=True)
+    odds = serializers.FloatField(source='cote')
+
+    class Meta:
+        model = Pari
+        fields = ['match_id', 'selection', 'odds']
+
+    def validate_selection(self, value):
+        # Table de conversion
+        selection_map = {
+            'equipe1': '1',
+            'equipe2': '2',
+            'nul': 'N',
+            # Garder aussi les valeurs déjà valides
+            '1': '1',
+            '2': '2',
+            'N': 'N'
+        }
+        
+        value = value.lower()
+        if value not in selection_map:
+            raise serializers.ValidationError(
+                f"Selection invalide: {value}. "
+                f"Valeurs acceptées: equipe1, equipe2, nul, 1, 2, N"
+            )
+            
+        return selection_map[value]
+
+class BetCreateSerializer(serializers.ModelSerializer):
+    bets = PariCreateSerializer(many=True)
+    total_odds = serializers.FloatField(write_only=True)
+    potential_winnings = serializers.FloatField(write_only=True)
+    
+    class Meta:
+        model = Bet
+        fields = ['mise', 'total_odds', 'potential_winnings', 'bets']
+
+    def validate(self, data):
+        if not data.get('bets'):
+            raise serializers.ValidationError("Au moins un pari est requis")
+        
+        if data['mise'] <= 0:
+            raise serializers.ValidationError("La mise doit être supérieure à 0")
+            
+        if data['total_odds'] <= 0:
+            raise serializers.ValidationError("La cote totale doit être supérieure à 0")
+            
+        calculated_winnings = data['mise'] * data['total_odds']
+        if abs(calculated_winnings - data['potential_winnings']) > 0.01:
+            raise serializers.ValidationError("Les gains potentiels ne correspondent pas au calcul mise * cote_totale")
+            
+        return data
+    
+    def create(self, validated_data):
+        try:
+            bets_data = validated_data.pop('bets')
+            validated_data['cote_totale'] = validated_data.pop('total_odds')
+            validated_data.pop('potential_winnings')
+            
+            paris_ids = []
+            paris_cotes = {}
+            
+            bet = Bet.objects.create(**validated_data)
+            
+            for pari_data in bets_data:
+                match_id = pari_data.pop('match_id')
+                cote = pari_data['cote']
+                
+                pari = Pari.objects.create(
+                    bet=bet,
+                    match_id=match_id,
+                    **pari_data
+                )
+                
+                paris_ids.append(pari.id)
+                paris_cotes[str(pari.id)] = float(cote)
+            
+            bet.paris_ids = paris_ids
+            bet.paris_cotes = paris_cotes
+            bet.save()
+            
+            return bet
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la création du pari: {str(e)}")
+            raise serializers.ValidationError(f"Erreur lors de la création du pari: {str(e)}")
 
 
 class MatchSerializer(ModelSerializer):
@@ -79,6 +171,13 @@ class PariSerializer(serializers.ModelSerializer):
                 "La sélection doit être '1', '2' ou 'N'"
             )
         return selection
+    
+class BetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bet
+        fields = ['id','actif', 'date_creation','cote_totale','mise']
+
+    
 
 class PariListSerializer(serializers.ModelSerializer):
     match_info = serializers.SerializerMethodField()
@@ -117,7 +216,7 @@ class PariListSerializer(serializers.ModelSerializer):
             return cote.coteN
 
     def get_groupe_details(self, obj):
-        groupe = obj.groupe
+        groupe = obj.bet
         return {
             'id': groupe.id,
             'mise': groupe.mise,
