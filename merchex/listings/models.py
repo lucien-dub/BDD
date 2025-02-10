@@ -15,6 +15,16 @@ class MyManager(models.Manager):
     def custom_method(self):
         return self.filter(is_active=True)
 
+def determiner_resultat_match(match):
+    """
+    Détermine le résultat d'un match (1, N, ou 2) en fonction des scores
+    """
+    if match.score1 > match.score2:
+        return '1'
+    elif match.score1 < match.score2:
+        return '2'
+    else:
+        return 'N'
 
 class Match(models.Model):
     id = models.IntegerField(primary_key=True)
@@ -33,6 +43,23 @@ class Match(models.Model):
         now = timezone.now()
         match_datetime = datetime.combine(self.date, self.heure)
         return match_datetime.timestamp() <= now.timestamp() or (self.score1 != 0 or self.score2 != 0)
+    
+    def save(self, *args, **kwargs):
+        # Si les scores ont changé, vérifier les paris associés
+        if self.pk:  # Si ce n'est pas une nouvelle création
+            old_match = Match.objects.get(pk=self.pk)
+            if (old_match.score1 != self.score1 or 
+                old_match.score2 != self.score2):
+                
+                # Récupérer tous les paris actifs liés à ce match
+                paris_actifs = self.paris.filter(actif=True)
+                
+                # Pour chaque pari, vérifier le statut du groupe
+                for pari in paris_actifs:
+                    if pari.bet:  # Si le pari appartient à un groupe
+                        pari.bet.verifier_statut()
+        
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'creation_bdd_match'
@@ -75,6 +102,35 @@ class Bet(models.Model):
         verbose_name = "Bets"
         verbose_name_plural = "Bets"
         ordering = ['-date_creation']
+
+    def verifier_statut(self):
+        """
+        Vérifie si l'un des paris du groupe est perdant
+        et désactive le groupe si nécessaire
+        """
+        for pari in self.paris.all():
+            match = pari.match
+            
+            # Vérifier si le match est terminé
+            if match.est_termine:
+                resultat_match = determiner_resultat_match(match)
+                
+                # Si la sélection ne correspond pas au résultat
+                if pari.selection != resultat_match:
+                    self.actif = False
+                    self.save()
+                    
+                    # Mettre à jour le résultat du pari
+                    pari.resultat = resultat_match
+                    pari.actif = False
+                    pari.save()
+                    return False
+                
+                # Si le pari est gagnant, mettre à jour son résultat
+                pari.resultat = resultat_match
+                pari.save()
+                
+        return True
 
 
 class Pari(models.Model):

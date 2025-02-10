@@ -38,7 +38,7 @@ class PariCreateSerializer(serializers.ModelSerializer):
             # Garder aussi les valeurs déjà valides
             '1': '1',
             '2': '2',
-            'N': 'N'
+            'n': 'N'
         }
         
         value = value.lower()
@@ -221,7 +221,7 @@ class PariListSerializer(serializers.ModelSerializer):
             'id': groupe.id,
             'mise': groupe.mise,
             'cote_totale': groupe.cote_totale,
-            'gains_potentiels': groupe.gains_potentiels
+            'date_creation':groupe.date_creation,
         }
 
 class UserPointsSerializer(serializers.ModelSerializer):

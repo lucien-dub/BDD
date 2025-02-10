@@ -5,6 +5,7 @@ from django.db import transaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.views import View
+from django.db.models import Prefetch
 
 
 from background.actualisation_bdd import Match
@@ -51,6 +52,62 @@ class PariViewSet(viewsets.ModelViewSet):
     
 logger = logging.getLogger(__name__)
 
+class BetViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def list(self, request):
+        try:
+            # Récupérer tous les paris de l'utilisateur avec les relations nécessaires
+            queryset = Bet.objects.filter(user=request.user).prefetch_related(
+                Prefetch(
+                    'paris',
+                    queryset=Pari.objects.select_related('match')
+                )
+            ).order_by('-date_creation')
+            
+            # Préparer les données de réponse
+            bets_data = []
+            for bet in queryset:
+                paris_data = []
+                for pari in bet.paris.all():
+                    paris_data.append({
+                        'id': pari.id,
+                        'match': {
+                            'equipe1': pari.match.equipe1,
+                            'equipe2': pari.match.equipe2,
+                            'score1': pari.match.score1,
+                            'score2': pari.match.score2,
+                            'date': pari.match.date,
+                            'heure': pari.match.heure,
+                            'sport': pari.match.sport,
+                            'niveau': pari.match.niveau
+                        },
+                        'selection': pari.selection,
+                        'cote': str(pari.cote),
+                        'resultat': pari.resultat,
+                        'actif': pari.actif
+                    })
+                
+                bet_data = {
+                    'id': bet.id,
+                    'mise': bet.mise,
+                    'cote_totale': bet.cote_totale,
+                    'gains_potentiels': round(float(bet.mise) * float(bet.cote_totale), 2),
+                    'date_creation': bet.date_creation,
+                    'actif': bet.actif,
+                    'paris': paris_data
+                }
+                bets_data.append(bet_data)
+            
+            return Response({'bets': bets_data}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération des paris: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la récupération des paris', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class CreateBetView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -58,7 +115,20 @@ class CreateBetView(APIView):
     def post(self, request):
         try:
             logger.info(f"Données reçues: {request.data}")
+
+            # Récupérer les points de l'utilisateur
+            user_points = UserPoints.get_or_create_points(request.user)
+            mise = float(request.data.get('mise', 0))
             
+            # Vérifier si l'utilisateur a assez de points
+            if user_points.total_points < mise:
+                return Response({
+                    'error': 'Points insuffisants',
+                    'details': f'Vous avez {user_points.total_points} points, mais la mise requiert {mise} points'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer = BetCreateSerializer(data=request.data)
+
             serializer = BetCreateSerializer(data=request.data)
             
             if not serializer.is_valid():
@@ -68,7 +138,22 @@ class CreateBetView(APIView):
                     'details': serializer.errors
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            bet = serializer.save(user=request.user)
+              # Créer le pari et déduire les points dans la même transaction
+            with transaction.atomic():
+                # Créer le pari
+                bet = serializer.save(user=request.user)
+                
+                # Déduire les points
+                user_points.total_points -= mise
+                user_points.save()
+                
+                # Enregistrer la transaction de points
+                PointTransaction.objects.create(
+                    user=request.user,
+                    points=mise,
+                    transaction_type=PointTransaction.SPEND,
+                    reason=f"Mise placée sur le pari #{bet.id}"
+                )
             
             return Response({
                 'message': 'Pari créé avec succès',
@@ -160,6 +245,40 @@ class UpdateCotesView(View):
                 'date_execution': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
             }
         })
+
+class VerifyBetsStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            # Récupérer tous les paris actifs de l'utilisateur
+            bets = Bet.objects.filter(
+                user=request.user,
+                actif=True
+            ).prefetch_related('paris', 'paris__match')
+            
+            updated_bets = []
+            for bet in bets:
+                initial_status = bet.actif
+                bet.verifier_statut()
+                
+                if initial_status != bet.actif:
+                    updated_bets.append({
+                        'bet_id': bet.id,
+                        'nouveau_statut': bet.actif
+                    })
+            
+            return Response({
+                'message': 'Vérification terminée',
+                'paris_mis_a_jour': updated_bets
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification des paris: {str(e)}")
+            return Response({
+                'error': 'Erreur lors de la vérification des paris',
+                'details': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 class RegisterView(APIView):
     permission_classes = (permissions.AllowAny,)
