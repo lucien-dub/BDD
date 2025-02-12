@@ -86,53 +86,66 @@ def import_matches_from_url(url, current_df=None):
     df, changed = export_excel_website(url, current_df, name_file)
     
     if changed:
+        matches_to_create = []
+        seen_matches = set()
+        current_id = 1
+        
         try:
-            with transaction.atomic():
-                # Générer un ID unique pour chaque match
-                max_id = Match.objects.all().aggregate(Max('id'))['id__max'] or 0
-                current_id = max_id
-                
-                for index, row in df.iterrows():
+            df['Date'] = df['Date'].astype(str)
+            df['Heure'] = df['Heure'].astype(str)
+            cols_to_convert = ['M. Joué', 'Forf. 1', 'Forf. 2']
+            for col in cols_to_convert:
+                df[col] = df[col].fillna("").apply(lambda x: True if x == 'x' else False)
+            
+            for index, row in df.iterrows():
+                try:
                     date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
-                                              format='%d/%m/%Y %H:%M')
+                                            format='%d/%m/%Y %H:%M', errors='coerce')
                     
-                    # Vérifier si le match existe déjà
-                    existing_match = Match.objects.filter(
-                        sport=extraire_sport(row['Poule']),
-                        date=date_heure.date(),
-                        heure=date_heure.time(),
-                        equipe1=row['Équipe 1'].strip(),
-                        equipe2=row['Équipe 2'].strip()
-                    ).first()
+                    if pd.isna(date_heure):
+                        print(f"Date invalide ligne {index}")
+                        continue
+
+                    match_key = (
+                        extraire_sport(row['Poule']),
+                        date_heure.date(),
+                        date_heure.time(),
+                        row['Équipe 1'].strip(),
+                        row['Équipe 2'].strip()
+                    )
                     
-                    if existing_match:
-                        # Mettre à jour le match existant
-                        existing_match.score1 = int(row['Score 1']) if pd.notna(row['Score 1']) else 0
-                        existing_match.score2 = int(row['Score 2']) if pd.notna(row['Score 2']) else 0
-                        existing_match.niveau = extraire_niveau(row['Poule'])
-                        existing_match.poule = extraire_poule(row['Poule'])
-                        existing_match.save()
-                        print(f"Match mis à jour: {existing_match}")
-                    else:
-                        # Créer un nouveau match avec un ID unique
-                        current_id += 1
-                        match = Match.objects.create(
-                            id=current_id,
-                            sport=extraire_sport(row['Poule']),
-                            date=date_heure.date(),
-                            heure=date_heure.time(),
-                            equipe1=row['Équipe 1'].strip(),
-                            equipe2=row['Équipe 2'].strip(),
-                            score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
-                            score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
-                            niveau=extraire_niveau(row['Poule']),
-                            poule=extraire_poule(row['Poule'])
-                        )
-                        print(f"Nouveau match créé: {match}")
-                        creer_cotes_pour_match(match)
+                    if match_key in seen_matches:
+                        continue
                         
+                    seen_matches.add(match_key)
+                    match = Match(
+                        id=current_id,
+                        sport=match_key[0],
+                        date=match_key[1],
+                        heure=match_key[2],
+                        equipe1=match_key[3],
+                        equipe2=match_key[4],
+                        score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
+                        score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
+                        niveau=extraire_niveau(row['Poule']),
+                        poule=extraire_poule(row['Poule']),
+                        match_joue=row['M. Joué'],
+                        forfait_1=row['Forf. 1'],
+                        forfait_2=row['Forf. 2']
+                    )
+                    matches_to_create.append(match)
+                    current_id += 1
+                    
+                except Exception as e:
+                    print(f"Erreur ligne {index}: {str(e)}")
+                    continue
+
+            with transaction.atomic():
+                Match.objects.bulk_create(matches_to_create)
+                print(f"{len(matches_to_create)} matchs créés")
+                    
         except Exception as e:
-            print(f"Erreur lors de l'import: {str(e)}")
+            print(f"Erreur import: {str(e)}")
             return current_df
             
         return df

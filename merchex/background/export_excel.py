@@ -98,7 +98,7 @@ if __name__ == "__main__":
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'merchex.settings')
     django.setup()
     
-    url = 'https://sportco.abyss-clients.com/rencontres/planning/export'
+    url = 'http://sportco.abyss-clients.com/rencontres/resultats/export'
     current_df = pd.DataFrame()  # DataFrame initial vide
     
     # Premier import

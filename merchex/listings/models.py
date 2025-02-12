@@ -37,6 +37,9 @@ class Match(models.Model):
     score2 = models.IntegerField()
     niveau = models.CharField(max_length=50)
     poule = models.CharField(max_length=50)
+    match_joue = models.BooleanField(default=False)
+    forfait_1 = models.BooleanField(default=False)
+    forfait_2 = models.BooleanField(default=False)
 
     @property
     def est_termine(self):

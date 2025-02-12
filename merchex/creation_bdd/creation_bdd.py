@@ -50,7 +50,10 @@ def import_matches(file_path):
                     score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
                     score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
                     niveau=extraire_niveau(row['Poule']),
-                    poule=extraire_poule(row['Poule'])
+                    poule=extraire_poule(row['Poule']),
+                    match_joue=row['M. Joué'].strip(),
+                    forfait_1=row['Forf. 1'].strip(),
+                    forfait_2=row['Forf. 2'].strip(),
                 )
                 print(f"Match importé: {match}")
                 
@@ -80,5 +83,5 @@ def affectation_cote(matches):
 
 # Exemple d'utilisation
 if __name__ == "__main__":
-    file_path = 'Export_Resultats_20241117.csv'  # Assurez-vous que le fichier est au format CSV
+    file_path = 'Export_Resultats_20250212.csv'  # Assurez-vous que le fichier est au format CSV
     import_matches(file_path)
