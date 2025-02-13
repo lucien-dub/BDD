@@ -88,14 +88,15 @@ def import_matches_from_url(url, current_df=None):
     if changed:
         matches_to_create = []
         seen_matches = set()
-        current_id = 1
+        max_id = Match.objects.aggregate(Max('id'))['id__max'] or 0
+        current_id = max_id + 1
         
         try:
             df['Date'] = df['Date'].astype(str)
             df['Heure'] = df['Heure'].astype(str)
             cols_to_convert = ['M. Joué', 'Forf. 1', 'Forf. 2']
             for col in cols_to_convert:
-                df[col] = df[col].fillna("").apply(lambda x: True if x == 'x' else False)
+                df[col] = df[col].fillna("").apply(lambda x: True if x == 'X' else False)
             
             for index, row in df.iterrows():
                 try:
@@ -114,6 +115,16 @@ def import_matches_from_url(url, current_df=None):
                         row['Équipe 2'].strip()
                     )
                     
+                    # Check if match already exists in database
+                    if Match.objects.filter(
+                        sport=match_key[0],
+                        date=match_key[1],
+                        heure=match_key[2],
+                        equipe1=match_key[3],
+                        equipe2=match_key[4]
+                    ).exists():
+                        continue
+                        
                     if match_key in seen_matches:
                         continue
                         
@@ -140,9 +151,11 @@ def import_matches_from_url(url, current_df=None):
                     print(f"Erreur ligne {index}: {str(e)}")
                     continue
 
-            with transaction.atomic():
+            if matches_to_create:
                 Match.objects.bulk_create(matches_to_create)
-                print(f"{len(matches_to_create)} matchs créés")
+                print(f"{len(matches_to_create)} nouveaux matchs créés")
+            else:
+                print("Aucun nouveau match à créer")
                     
         except Exception as e:
             print(f"Erreur import: {str(e)}")
@@ -153,6 +166,7 @@ def import_matches_from_url(url, current_df=None):
 
 # Commande Django pour exécuter le script
 class Command(BaseCommand):
+    
     help = 'Met à jour les matchs depuis le site FFSU'
 
     def handle(self, *args, **kwargs):
@@ -166,3 +180,4 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('Mise à jour terminée avec succès !'))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour : {str(e)}'))
+
