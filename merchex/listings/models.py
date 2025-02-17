@@ -26,6 +26,17 @@ def determiner_resultat_match(match):
     else:
         return 'N'
 
+class Ecole(models.Model):
+    id = models.BigAutoField()
+    lieu = models.CharField(max_length = 100)
+
+class Equipe(models.Model):
+    id = models.BigAutoField()
+    academie = models.CharField(max_length=100)
+    poule = models.Charfield(max_length = 100)
+    sport = models.Charfield(max_length = 100)
+
+
 class Match(models.Model):
     id = models.IntegerField(primary_key=True)
     sport = models.CharField(max_length=50)
@@ -108,18 +119,22 @@ class Bet(models.Model):
 
     def verifier_statut(self):
         """
-        Vérifie si l'un des paris du groupe est perdant
-        et désactive le groupe si nécessaire
+        Vérifie le statut de tous les paris du groupe et attribue les points si tous sont gagnants
         """
+        tous_paris_gagnes = True
+        paris_verifies = False  # Pour suivre si au moins un pari a été vérifié
+
         for pari in self.paris.all():
             match = pari.match
             
             # Vérifier si le match est terminé
             if match.est_termine:
+                paris_verifies = True
                 resultat_match = determiner_resultat_match(match)
                 
                 # Si la sélection ne correspond pas au résultat
                 if pari.selection != resultat_match:
+                    tous_paris_gagnes = False
                     self.actif = False
                     self.save()
                     
@@ -132,8 +147,37 @@ class Bet(models.Model):
                 # Si le pari est gagnant, mettre à jour son résultat
                 pari.resultat = resultat_match
                 pari.save()
-                
-        return True
+
+        # Si tous les paris sont gagnants et au moins un pari a été vérifié
+        if tous_paris_gagnes and paris_verifies:
+            # Calculer les gains
+            gains = int(self.mise * self.cote_totale)
+            
+            # Récupérer ou créer les points de l'utilisateur
+            user_points = UserPoints.get_or_create_points(self.user)
+            
+            # Créer une transaction pour tracer les points gagnés
+            PointTransaction.objects.create(
+                user=self.user,
+                points=gains,
+                transaction_type=PointTransaction.EARN,
+                reason=f"Gains du pari combiné #{self.id}"
+            )
+            
+            # Mettre à jour les points de l'utilisateur
+            user_points.total_points += gains
+            user_points.save()
+            
+            # Désactiver le pari car il est terminé et gagné
+            self.actif = False
+            self.save()
+            
+            # Désactiver tous les paris individuels
+            self.paris.all().update(actif=False)
+            
+            return True
+            
+        return self.actif
 
 
 class Pari(models.Model):
