@@ -173,13 +173,10 @@ class Command(BaseCommand):
         self.stdout.write('Début de la mise à jour des matchs...')
         
         url = 'https://sportco.abyss-clients.com/rencontres/resultats/export'
-        url2 = 'https://sportco.abyss-clients.com/rencontres/planning/export'
-        current_df = pd.DataFrame()
-        current_df2 = pd.DataFrame()
-        
+        current_df = pd.DataFrame()      
+          
         try:
             current_df = import_matches_from_url(url, current_df)
-            current_df2 = import_matches_from_url(url2, current_df2)
             self.stdout.write(self.style.SUCCESS('Mise à jour terminée avec succès !'))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour : {str(e)}'))
