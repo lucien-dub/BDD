@@ -27,14 +27,20 @@ def determiner_resultat_match(match):
         return 'N'
 
 class Ecole(models.Model):
-    id = models.BigAutoField()
-    lieu = models.CharField(max_length = 100)
+    # Supprimer la ligne id = models.BigAutoField() car Django le crée automatiquement
+    lieu = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.lieu
 
 class Equipe(models.Model):
-    id = models.BigAutoField()
+    # Supprimer la ligne id = models.BigAutoField() car Django le crée automatiquement
     academie = models.CharField(max_length=100)
-    poule = models.Charfield(max_length = 100)
-    sport = models.Charfield(max_length = 100)
+    poule = models.CharField(max_length=100)  # Correction de Charfield à CharField
+    sport = models.CharField(max_length=100)  # Correction de Charfield à CharField
+
+    def __str__(self):
+        return f"{self.academie} - {self.sport}"
 
 
 class Match(models.Model):
@@ -51,6 +57,10 @@ class Match(models.Model):
     match_joue = models.BooleanField(default=False)
     forfait_1 = models.BooleanField(default=False)
     forfait_2 = models.BooleanField(default=False)
+    lieu = models.CharField(max_length=200,null=True, blank=True)
+    arbitre = models.CharField(max_length=200, null=True, blank=True)
+    commentaires = models.CharField(max_length=200,null=True, blank=True)
+    academie = models.CharField(max_length=200, blank=True, default='')
 
     @property
     def est_termine(self):

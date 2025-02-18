@@ -1,3 +1,4 @@
+import json
 from django.core.management.base import BaseCommand
 import pandas as pd
 import requests
@@ -7,31 +8,23 @@ import re
 from datetime import datetime
 from django.db.models import Max
 
-
-# Fonctions utilitaires pour extraire des informations spécifiques
 def extraire_sport(texte):
     match = re.search(r'-\s*(.*?)\s*\(', texte)
     return match.group(1).strip() if match else ''
-
 
 def extraire_niveau(texte):
     match = re.search(r'\((.*?)\)', texte)
     return match.group(1).strip() if match else ''
 
-
 def extraire_poule(texte):
     match = re.search(r'(\w{2})(?= -)', texte)
     return match.group(1).strip() if match else ''
 
-
 def calculer_cote(match):
-    """Calcul de la cote pour un match spécifique."""
     match_id = match.id if match.id else 0
     return round(1 / (1.01 + match_id), 2)
 
-
 def creer_cotes_pour_match(match):
-    """Crée les cotes pour un match spécifique."""
     if match.id is None:
         raise ValueError("Le match doit être sauvegardé avant de créer les cotes.")
     
@@ -40,26 +33,17 @@ def creer_cotes_pour_match(match):
         Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
         Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
     ]
-    # Utilisation de bulk_create pour insérer les cotes en une seule requête
     Cote.objects.bulk_create(cotes)
 
-
-# Fonction pour télécharger et comparer les fichiers Excel
 def export_excel_website(url: str, df_original, name_file: str):
-    """
-    Télécharge le fichier Excel depuis le site web et compare avec l'ancien fichier.
-    """
     try:
         response = requests.post(url)
         if response.status_code == 200:
             with open(name_file, 'wb') as file:
                 file.write(response.content)
-            print("Fichier téléchargé avec succès !")
+            print(f"Fichier {name_file} téléchargé avec succès !")
             
-            # Lecture du fichier Excel
             df_new = pd.read_excel(name_file, engine='openpyxl')
-            
-            # Supprimer les colonnes dupliquées
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
             if df_original.equals(pd.DataFrame(df_new)):
@@ -76,108 +60,213 @@ def export_excel_website(url: str, df_original, name_file: str):
         print(f"Erreur lors de l'export : {str(e)}")
         return df_original, False
 
-
-# Fonction principale pour importer les matchs
-def import_matches_from_url(url, current_df=None):
-    if current_df is None:
-        current_df = pd.DataFrame()
-        
-    name_file = 'Export_Resultats.xlsx'
-    df, changed = export_excel_website(url, current_df, name_file)
+def fusionner_donnees_match(df_planning, df_resultats):
+    def create_match_key(row):
+        return f"{row['Poule']}_{row['Date']}_{row['Heure']}_{row['Équipe 1']}_{row['Équipe 2']}"
     
-    if changed:
-        matches_to_create = []
-        seen_matches = set()
-        max_id = Match.objects.aggregate(Max('id'))['id__max'] or 0
-        current_id = max_id + 1
-        
-        try:
-            df['Date'] = df['Date'].astype(str)
-            df['Heure'] = df['Heure'].astype(str)
-            cols_to_convert = ['M. Joué', 'Forf. 1', 'Forf. 2']
-            for col in cols_to_convert:
-                df[col] = df[col].fillna("").apply(lambda x: True if x == 'X' else False)
-            
-            for index, row in df.iterrows():
-                try:
-                    date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", 
-                                            format='%d/%m/%Y %H:%M', errors='coerce')
-                    
-                    if pd.isna(date_heure):
-                        print(f"Date invalide ligne {index}")
-                        continue
+    df_planning['match_key'] = df_planning.apply(create_match_key, axis=1)
+    df_resultats['match_key'] = df_resultats.apply(create_match_key, axis=1)
+    
+    df_complet = pd.merge(
+        df_planning,
+        df_resultats.drop(['Poule', 'Date', 'Heure', 'Équipe 1', 'Équipe 2'], axis=1),
+        on='match_key',
+        how='outer'
+    )
+    
+    df_complet = df_complet.drop('match_key', axis=1)
+    
+    return df_complet
 
-                    match_key = (
-                        extraire_sport(row['Poule']),
-                        date_heure.date(),
-                        date_heure.time(),
-                        row['Équipe 1'].strip(),
-                        row['Équipe 2'].strip()
-                    )
-                    
-                    # Check if match already exists in database
-                    if Match.objects.filter(
-                        sport=match_key[0],
-                        date=match_key[1],
-                        heure=match_key[2],
-                        equipe1=match_key[3],
-                        equipe2=match_key[4]
-                    ).exists():
-                        continue
-                        
-                    if match_key in seen_matches:
-                        continue
-                        
-                    seen_matches.add(match_key)
-                    match = Match(
-                        id=current_id,
-                        sport=match_key[0],
-                        date=match_key[1],
-                        heure=match_key[2],
-                        equipe1=match_key[3],
-                        equipe2=match_key[4],
-                        score1=int(row['Score 1']) if pd.notna(row['Score 1']) else 0,
-                        score2=int(row['Score 2']) if pd.notna(row['Score 2']) else 0,
-                        niveau=extraire_niveau(row['Poule']),
-                        poule=extraire_poule(row['Poule']),
-                        match_joue=row['M. Joué'],
-                        forfait_1=row['Forf. 1'],
-                        forfait_2=row['Forf. 2']
-                    )
-                    matches_to_create.append(match)
-                    current_id += 1
-                    
-                except Exception as e:
-                    print(f"Erreur ligne {index}: {str(e)}")
+def corriger_json(input_file, output_file):
+    # Lire le contenu du fichier
+    with open(input_file, 'r', encoding='utf-8') as f:
+        contenu = f.read()
+
+    # Corriger le format JSON
+    # Supprimer les guillemets supplémentaires et les espaces inutiles
+    contenu_corrige = re.sub(r'""', '"', contenu)
+    contenu_corrige = re.sub(r'\s+"', '": "', contenu_corrige)
+    contenu_corrige = re.sub(r'"\s+', '": "', contenu_corrige)
+    contenu_corrige = re.sub(r'"\s*,', '",', contenu_corrige)
+
+    # Corriger les cas où il y a des espaces avant les clés ou après les virgules
+    contenu_corrige = re.sub(r',\s*', ',', contenu_corrige)
+    contenu_corrige = re.sub(r'\s*{\s*', '{', contenu_corrige)
+    contenu_corrige = re.sub(r'\s*}\s*', '}', contenu_corrige)
+
+    # Ajouter des accolades si nécessaire
+    if not contenu_corrige.strip().startswith('{'):
+        contenu_corrige = '{' + contenu_corrige.strip()
+    if not contenu_corrige.strip().endswith('}'):
+        contenu_corrige = contenu_corrige.strip() + '}'
+
+    # Écrire le contenu corrigé dans un nouveau fichier
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(contenu_corrige)
+
+
+def charger_cache_lieux():
+    """Charge le fichier de correspondance lieux-académies"""
+    try:
+        # Corriger le fichier JSON
+        corriger_json('cache_lieux.json', 'cache_lieux_corrige.json')
+
+        # Charger le fichier JSON corrigé
+        with open('cache_lieux.json', 'r', encoding='utf-8') as f:
+            json.load(f)  # Cela affichera une erreur si le fichier est mal formé
+
+    except Exception as e:
+        print(f"Erreur lors du chargement du cache des lieux : {str(e)}")
+        return {}
+
+def obtenir_academie(lieu, cache_lieux):
+    """Récupère l'académie associée à un lieu"""
+    # Nettoyer le lieu pour la comparaison
+    lieu_clean = lieu.strip().lower()
+    return cache_lieux.get(lieu_clean, '')
+
+def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=None, current_df_planning=None):
+    if current_df_resultats is None:
+        current_df_resultats = pd.DataFrame()
+    if current_df_planning is None:
+        current_df_planning = pd.DataFrame()
+        
+    # Charger le cache des lieux
+    cache_lieux = charger_cache_lieux()
+    
+    # Télécharger les deux fichiers
+    df_resultats, changed_resultats = export_excel_website(url_resultats, current_df_resultats, 'Export_Resultats.xlsx')
+    df_planning, changed_planning = export_excel_website(url_planning, current_df_planning, 'Export_Planning.xlsx')
+    
+    if not (changed_resultats or changed_planning):
+        return current_df_resultats, current_df_planning
+        
+    # Fusionner les données
+    df_complet = fusionner_donnees_match(df_planning, df_resultats)
+    
+    matches_to_create = []
+    seen_matches = set()
+    max_id = Match.objects.aggregate(Max('id'))['id__max'] or 0
+    current_id = max_id + 1
+    
+    try:
+        df_complet['Date'] = df_complet['Date'].astype(str)
+        df_complet['Heure'] = df_complet['Heure'].astype(str)
+        
+        # Conversion des colonnes booléennes
+        bool_columns = ['M. Joué', 'Forf. 1', 'Forf. 2', 'F. 1 n.d.', 'F. 2 n.d.']
+        for col in bool_columns:
+            if col in df_complet.columns:
+                df_complet[col] = df_complet[col].fillna("").apply(lambda x: True if x == 'X' else False)
+        
+        for index, row in df_complet.iterrows():
+            try:
+                if pd.notna(row['Date']) and pd.notna(row['Heure']):
+                    date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", format='%d/%m/%Y %H:%M', errors='coerce')
+                else:
+                    date_heure = None
+
+                
+                if pd.isna(date_heure):
+                    print(f"Date invalide ligne {index}")
                     continue
 
-            if matches_to_create:
-                Match.objects.bulk_create(matches_to_create)
-                print(f"{len(matches_to_create)} nouveaux matchs créés")
-            else:
-                print("Aucun nouveau match à créer")
-                    
-        except Exception as e:
-            print(f"Erreur import: {str(e)}")
-            return current_df
-            
-        return df
-    return current_df
+                match_key = (
+                    extraire_sport(row['Poule']),
+                    date_heure.date(),
+                    date_heure.time(),
+                    row['Équipe 1'].strip(),
+                    row['Équipe 2'].strip()
+                )
+                
+                # Obtenir l'académie pour le lieu
+                lieu = row.get('Lieu', '').strip()
+                academie = obtenir_academie(lieu, cache_lieux)
+                
+                # Chercher si le match existe
+                match_existant = Match.objects.filter(
+                    sport=match_key[0],
+                    date=match_key[1],
+                    heure=match_key[2],
+                    equipe1=match_key[3],
+                    equipe2=match_key[4]
+                ).first()
 
-# Commande Django pour exécuter le script
+                if match_existant:
+                    # Mettre à jour les informations du planning
+                    match_existant.lieu = lieu
+                    match_existant.arbitre = row.get('Arbitre(s)', '')
+                    match_existant.commentaires = row.get('Commentaires', '')
+                    match_existant.academie = academie  # Ajout de l'académie
+                    match_existant.save()
+                    continue
+                    
+                if match_key in seen_matches:
+                    continue
+                    
+                seen_matches.add(match_key)
+                match = Match(
+                    id=current_id,
+                    sport=match_key[0],
+                    date=match_key[1],
+                    heure=match_key[2],
+                    equipe1=match_key[3],
+                    equipe2=match_key[4],
+                    score1=int(row['Score 1']) if pd.notna(row.get('Score 1')) else 0,
+                    score2=int(row['Score 2']) if pd.notna(row.get('Score 2')) else 0,
+                    niveau=extraire_niveau(row['Poule']),
+                    poule=extraire_poule(row['Poule']),
+                    match_joue=row.get('M. Joué', False),
+                    forfait_1=row.get('Forf. 1', False),
+                    forfait_2=row.get('Forf. 2', False),
+                    lieu = str(row.get('Lieu', '')).strip(),
+                    academie=academie,  # Ajout de l'académie
+                )
+                matches_to_create.append(match)
+                current_id += 1
+                
+            except Exception as e:
+                print(f"Erreur ligne {index}: {str(e)}")
+                continue
+
+        if matches_to_create:
+            with transaction.atomic():
+                Match.objects.bulk_create(matches_to_create)
+                for match in matches_to_create:
+                    creer_cotes_pour_match(match)
+            print(f"{len(matches_to_create)} nouveaux matchs créés")
+        else:
+            print("Aucun nouveau match à créer")
+                
+    except Exception as e:
+        print(f"Erreur import: {str(e)}")
+        return current_df_resultats, current_df_planning
+        
+    return df_resultats, df_planning
+
 class Command(BaseCommand):
-    
-    help = 'Met à jour les matchs depuis le site FFSU'
+    help = 'Met à jour les matchs depuis le site FFSU avec données de planning et résultats'
 
     def handle(self, *args, **kwargs):
         self.stdout.write('Début de la mise à jour des matchs...')
         
-        url = 'https://sportco.abyss-clients.com/rencontres/resultats/export'
-        current_df = pd.DataFrame()      
-          
+        url_resultats = 'https://sportco.abyss-clients.com/rencontres/resultats/export'
+        url_planning = 'https://sportco.abyss-clients.com/rencontres/planning/export?id=1&GrpId=9'
+        
+        current_df_resultats = pd.DataFrame()
+        current_df_planning = pd.DataFrame()
+        
         try:
-            current_df = import_matches_from_url(url, current_df)
+            current_df_resultats, current_df_planning = import_matches_from_urls(
+                url_resultats, 
+                url_planning, 
+                current_df_resultats, 
+                current_df_planning
+            )
             self.stdout.write(self.style.SUCCESS('Mise à jour terminée avec succès !'))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour : {str(e)}'))
+            return
+
 
