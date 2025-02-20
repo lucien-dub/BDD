@@ -6,10 +6,12 @@ from django.db.models import Sum
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-from datetime import datetime
+from datetime import datetime, time
 from django.db import models
 from django.core.exceptions import ValidationError
 from decimal import Decimal
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class MyManager(models.Manager):
     def custom_method(self):
@@ -106,6 +108,7 @@ class Bet(models.Model):
     mise = models.FloatField(max_length=6, default=0)
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     cote_totale = models.FloatField(max_length=5, default=1)
+    annule = models.BooleanField(default='False')
 
     # Ajout d'une relation avec l'utilisateur
     user = models.ForeignKey(
@@ -133,6 +136,7 @@ class Bet(models.Model):
         """
         tous_paris_gagnes = True
         paris_verifies = False  # Pour suivre si au moins un pari a été vérifié
+        match_annule = False   # Pour suivre si un match est annulé
 
         for pari in self.paris.all():
             match = pari.match
@@ -140,6 +144,23 @@ class Bet(models.Model):
             # Vérifier si le match est terminé
             if match.est_termine:
                 paris_verifies = True
+                
+                # Vérifier si le match est annulé (score NaN)
+                if match.score1 == 'NaN' or match.score2 == 'NaN':
+                    match_annule = True
+                    break  # Sortir de la boucle car le bet sera annulé
+                
+                # Gérer les cas de forfait
+                if match.forfait_1 and pari.selection == '1':
+                    pari.resultat = 'F1'
+                    pari.save()
+                    continue
+                    
+                if match.forfait_2 and pari.selection == '2':
+                    pari.resultat = 'F2'
+                    pari.save()
+                    continue
+                
                 resultat_match = determiner_resultat_match(match)
                 
                 # Si la sélection ne correspond pas au résultat
@@ -157,6 +178,33 @@ class Bet(models.Model):
                 # Si le pari est gagnant, mettre à jour son résultat
                 pari.resultat = resultat_match
                 pari.save()
+
+        # Si un match est annulé, rembourser la mise
+        if match_annule:
+            self.annule = True
+            # Récupérer les points de l'utilisateur
+            user_points = UserPoints.get_or_create_points(self.user)
+            
+            # Créer une transaction pour tracer le remboursement
+            PointTransaction.objects.create(
+                user=self.user,
+                points=self.mise,  # Remboursement de la mise initiale
+                transaction_type=PointTransaction.EARN,
+                reason=f"Remboursement du pari #{self.id} - Match annulé"
+            )
+            
+            # Rendre les points à l'utilisateur
+            user_points.total_points += self.mise
+            user_points.save()
+            
+            # Désactiver le pari
+            self.actif = False
+            self.save()
+            
+            # Marquer tous les paris comme annulés
+            self.paris.all().update(actif=False, resultat='NaN')
+            
+            return False
 
         # Si tous les paris sont gagnants et au moins un pari a été vérifié
         if tous_paris_gagnes and paris_verifies:
@@ -189,7 +237,6 @@ class Bet(models.Model):
             
         return self.actif
 
-
 class Pari(models.Model):
     """Modèle pour les paris individuels"""
     id = models.BigAutoField(primary_key=True)
@@ -220,7 +267,9 @@ class Pari(models.Model):
         ('NaN', 'En attente'),
         ('1', 'Victoire Équipe 1'),
         ('N', 'Match Nul'),
-        ('2', 'Victoire Équipe 2')
+        ('2', 'Victoire Équipe 2'),
+        ('F1', 'Forfait Équipe 1'),
+        ('F2', 'Forfait Équipe 2')
     ]
 
     selection = models.CharField(
@@ -304,3 +353,40 @@ class PointTransaction(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.transaction_type} - {self.points} points"    
+    
+class UserLoginTracker(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='login_tracker')
+    daily_login_count = models.IntegerField(default=0)
+    last_reset = models.DateField(default=timezone.now)
+
+    def increment_login_count(self):
+        # Si c'est un nouveau jour, réinitialiser le compteur
+        today = timezone.now().date()
+        if self.last_reset != today:
+            self.daily_login_count = 0
+            self.last_reset = today
+
+        # Si c'est la première connexion de la journée
+        if self.daily_login_count == 0:
+            # Chercher les points de l'utilisateur
+            user_points = UserPoints.get_or_create_points(self.user)
+            # Ajouter 10 points
+            user_points.total_points += 10
+            user_points.save()
+            
+            # Créer une transaction pour tracer les points gagnés
+            PointTransaction.objects.create(
+                user=self.user,
+                points=10,
+                transaction_type=PointTransaction.EARN,
+                reason="Première connexion de la journée"
+            )
+
+        self.daily_login_count += 1
+        self.save()
+
+@receiver(post_save, sender=User)
+def create_user_login_tracker(sender, instance, created, **kwargs):
+    """Crée automatiquement un UserLoginTracker pour chaque nouvel utilisateur"""
+    if created:
+        UserLoginTracker.objects.create(user=instance)

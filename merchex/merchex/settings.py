@@ -111,7 +111,8 @@ SIMPLE_JWT = {
 }
 
 CRONJOBS = [
-    ('0 0 * * *', 'votre_app.cron.update_all_cotes')  # Minuit chaque jour
+    ('0 0 * * *', 'listings.cron.update_all_cotes'),
+    ('0 0 * * *', 'django.core.management.call_command', ['reset_login_counts']),
 ]
 
 ROOT_URLCONF = 'merchex.urls'
