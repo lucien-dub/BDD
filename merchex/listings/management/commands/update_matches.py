@@ -1,3 +1,6 @@
+#update_matches.py
+#Pour appeler la commande : "python manage.py update_matches"
+
 import json
 from django.core.management.base import BaseCommand
 import pandas as pd
@@ -28,12 +31,13 @@ def creer_cotes_pour_match(match):
     if match.id is None:
         raise ValueError("Le match doit être sauvegardé avant de créer les cotes.")
     
-    cotes = [
-        Cote(match=match, type_cote=f"victoire {match.equipe1}", valeur=calculer_cote(match)),
-        Cote(match=match, type_cote=f"victoire {match.equipe2}", valeur=1 + calculer_cote(match)),
-        Cote(match=match, type_cote="Nul", valeur=2 + calculer_cote(match))
-    ]
-    Cote.objects.bulk_create(cotes)
+    cote = Cote(
+        match=match,
+        coteN=2 + calculer_cote(match),  # Match nul
+        cote1=calculer_cote(match),      # Victoire équipe 1
+        cote2=1 + calculer_cote(match)   # Victoire équipe 2
+    )
+    cote.save()
 
 def export_excel_website(url: str, df_original, name_file: str):
     try:
@@ -43,7 +47,30 @@ def export_excel_website(url: str, df_original, name_file: str):
                 file.write(response.content)
             print(f"Fichier {name_file} téléchargé avec succès !")
             
-            df_new = pd.read_excel(name_file, engine='openpyxl')
+            # Add dtype specification to ensure proper data types
+            df_new = pd.read_excel(
+                name_file, 
+                engine='openpyxl',
+                dtype={
+                    'Équipe 1': str,
+                    'Équipe 2': str,
+                    'Poule': str,
+                    'Lieu': str,
+                    'Score 1': float,
+                    'Score 2': float
+                }
+            )
+            
+            # Clean up any NaN values
+            df_new = df_new.fillna({
+                'Équipe 1': '',
+                'Équipe 2': '',
+                'Poule': '',
+                'Lieu': '',
+                'Score 1': 0,
+                'Score 2': 0
+            })
+            
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
             if df_original.equals(pd.DataFrame(df_new)):
@@ -59,6 +86,7 @@ def export_excel_website(url: str, df_original, name_file: str):
     except Exception as e:
         print(f"Erreur lors de l'export : {str(e)}")
         return df_original, False
+    
 
 def fusionner_donnees_match(df_planning, df_resultats):
     def create_match_key(row):
@@ -78,62 +106,11 @@ def fusionner_donnees_match(df_planning, df_resultats):
     
     return df_complet
 
-def corriger_json(input_file, output_file):
-    # Lire le contenu du fichier
-    with open(input_file, 'r', encoding='utf-8') as f:
-        contenu = f.read()
-
-    # Corriger le format JSON
-    # Supprimer les guillemets supplémentaires et les espaces inutiles
-    contenu_corrige = re.sub(r'""', '"', contenu)
-    contenu_corrige = re.sub(r'\s+"', '": "', contenu_corrige)
-    contenu_corrige = re.sub(r'"\s+', '": "', contenu_corrige)
-    contenu_corrige = re.sub(r'"\s*,', '",', contenu_corrige)
-
-    # Corriger les cas où il y a des espaces avant les clés ou après les virgules
-    contenu_corrige = re.sub(r',\s*', ',', contenu_corrige)
-    contenu_corrige = re.sub(r'\s*{\s*', '{', contenu_corrige)
-    contenu_corrige = re.sub(r'\s*}\s*', '}', contenu_corrige)
-
-    # Ajouter des accolades si nécessaire
-    if not contenu_corrige.strip().startswith('{'):
-        contenu_corrige = '{' + contenu_corrige.strip()
-    if not contenu_corrige.strip().endswith('}'):
-        contenu_corrige = contenu_corrige.strip() + '}'
-
-    # Écrire le contenu corrigé dans un nouveau fichier
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(contenu_corrige)
-
-
-def charger_cache_lieux():
-    """Charge le fichier de correspondance lieux-académies"""
-    try:
-        # Corriger le fichier JSON
-        corriger_json('cache_lieux.json', 'cache_lieux_corrige.json')
-
-        # Charger le fichier JSON corrigé
-        with open('cache_lieux.json', 'r', encoding='utf-8') as f:
-            json.load(f)  # Cela affichera une erreur si le fichier est mal formé
-
-    except Exception as e:
-        print(f"Erreur lors du chargement du cache des lieux : {str(e)}")
-        return {}
-
-def obtenir_academie(lieu, cache_lieux):
-    """Récupère l'académie associée à un lieu"""
-    # Nettoyer le lieu pour la comparaison
-    lieu_clean = lieu.strip().lower()
-    return cache_lieux.get(lieu_clean, '')
-
 def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=None, current_df_planning=None):
     if current_df_resultats is None:
         current_df_resultats = pd.DataFrame()
     if current_df_planning is None:
         current_df_planning = pd.DataFrame()
-        
-    # Charger le cache des lieux
-    cache_lieux = charger_cache_lieux()
     
     # Télécharger les deux fichiers
     df_resultats, changed_resultats = export_excel_website(url_resultats, current_df_resultats, 'Export_Resultats.xlsx')
@@ -166,6 +143,9 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                     date_heure = pd.to_datetime(f"{row['Date']} {row['Heure']}", format='%d/%m/%Y %H:%M', errors='coerce')
                 else:
                     date_heure = None
+                
+                equipe1 = str(row['Équipe 1']).strip() if pd.notna(row['Équipe 1']) else ''
+                equipe2 = str(row['Équipe 2']).strip() if pd.notna(row['Équipe 2']) else ''
 
                 
                 if pd.isna(date_heure):
@@ -182,7 +162,7 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                 
                 # Obtenir l'académie pour le lieu
                 lieu = row.get('Lieu', '').strip()
-                academie = obtenir_academie(lieu, cache_lieux)
+                academie = 'Occitanie_Toulouse'
                 
                 # Chercher si le match existe
                 match_existant = Match.objects.filter(
@@ -211,8 +191,8 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                     sport=match_key[0],
                     date=match_key[1],
                     heure=match_key[2],
-                    equipe1=match_key[3],
-                    equipe2=match_key[4],
+                    equipe1=equipe1,
+                    equipe2=equipe2,
                     score1=int(row['Score 1']) if pd.notna(row.get('Score 1')) else 0,
                     score2=int(row['Score 2']) if pd.notna(row.get('Score 2')) else 0,
                     niveau=extraire_niveau(row['Poule']),
@@ -251,7 +231,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('Début de la mise à jour des matchs...')
         
-        url_resultats = 'https://sportco.abyss-clients.com/rencontres/resultats/export'
+        url_resultats = 'https://sportco.abyss-clients.com/rencontres/resultats/export?id=1&GrpId=9'
         url_planning = 'https://sportco.abyss-clients.com/rencontres/planning/export?id=1&GrpId=9'
         
         current_df_resultats = pd.DataFrame()
