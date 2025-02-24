@@ -114,7 +114,7 @@ class MatchSerializer(ModelSerializer):
  
     class Meta:
         model = Match
-        fields = ['id','sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2', 'heure', 'niveau', 'match_joue', 'forfait_1','forfait_2']
+        fields = ['id','sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2', 'heure', 'niveau', 'match_joue', 'forfait_1','forfait_2','academie']
 
 class CoteSerializer(ModelSerializer):
  

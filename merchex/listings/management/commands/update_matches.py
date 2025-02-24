@@ -1,7 +1,6 @@
 #update_matches.py
-#Pour appeler la commande : "python manage.py update_matches"
+#Pour appeler la fonction il faut mettre 'python manage.py update_matches'
 
-import json
 from django.core.management.base import BaseCommand
 import pandas as pd
 import requests
@@ -10,6 +9,27 @@ from listings.models import Match, Cote
 import re
 from datetime import datetime
 from django.db.models import Max
+import os
+
+# Dictionnaire des académies et leurs GrpId
+ACADEMIES_GRPID = {
+    'Lyon': 1,
+    'Clermont': 3,
+    'Grenoble': 4,
+    'Saint Etienne': 5,
+    'Aix/Marseille': 6,
+    'Montpellier': 8,
+    'Toulouse': 9,
+    'Angers': 11,
+    'La Roche-sur-Yon': 12,
+    'Bordeaux': 13,
+    'Hauts-de-France': 14,
+    'Reims': 15,
+    'Ile-de-France': 17,
+    'Strasbourg': 20,
+}
+
+EXCEL_DIR = 'Excels'
 
 def extraire_sport(texte):
     match = re.search(r'-\s*(.*?)\s*\(', texte)
@@ -33,23 +53,25 @@ def creer_cotes_pour_match(match):
     
     cote = Cote(
         match=match,
-        coteN=2 + calculer_cote(match),  # Match nul
-        cote1=calculer_cote(match),      # Victoire équipe 1
-        cote2=1 + calculer_cote(match)   # Victoire équipe 2
+        coteN=2 + calculer_cote(match),
+        cote1=calculer_cote(match),
+        cote2=1 + calculer_cote(match)
     )
     cote.save()
 
-def export_excel_website(url: str, df_original, name_file: str):
+def export_excel_website(url: str, df_original, name_file: str, academie: str):
     try:
         response = requests.post(url)
         if response.status_code == 200:
-            with open(name_file, 'wb') as file:
-                file.write(response.content)
-            print(f"Fichier {name_file} téléchargé avec succès !")
+            file_name = f"{academie}_{name_file}"
+            file_path = os.path.join(EXCEL_DIR, file_name)
             
-            # Add dtype specification to ensure proper data types
+            with open(file_path, 'wb') as file:
+                file.write(response.content)
+            print(f"Fichier {file_name} téléchargé avec succès !")
+            
             df_new = pd.read_excel(
-                name_file, 
+                file_path, 
                 engine='openpyxl',
                 dtype={
                     'Équipe 1': str,
@@ -61,7 +83,6 @@ def export_excel_website(url: str, df_original, name_file: str):
                 }
             )
             
-            # Clean up any NaN values
             df_new = df_new.fillna({
                 'Équipe 1': '',
                 'Équipe 2': '',
@@ -74,19 +95,18 @@ def export_excel_website(url: str, df_original, name_file: str):
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
             if df_original.equals(pd.DataFrame(df_new)):
-                print("Les fichiers sont identiques.")
+                print(f"Les fichiers sont identiques pour {academie}.")
                 return df_original, False
             else:
-                print("Les fichiers sont différents.")
+                print(f"Les fichiers sont différents pour {academie}.")
                 return pd.DataFrame(df_new), True
         else:
-            print(f"Échec du téléchargement du fichier. Code de statut : {response.status_code}")
+            print(f"Échec du téléchargement du fichier pour {academie}. Code de statut : {response.status_code}")
             return df_original, False
             
     except Exception as e:
-        print(f"Erreur lors de l'export : {str(e)}")
+        print(f"Erreur lors de l'export pour {academie} : {str(e)}")
         return df_original, False
-    
 
 def fusionner_donnees_match(df_planning, df_resultats):
     def create_match_key(row):
@@ -106,20 +126,18 @@ def fusionner_donnees_match(df_planning, df_resultats):
     
     return df_complet
 
-def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=None, current_df_planning=None):
+def import_matches_from_urls(url_resultats, url_planning, academie, current_df_resultats=None, current_df_planning=None):
     if current_df_resultats is None:
         current_df_resultats = pd.DataFrame()
     if current_df_planning is None:
         current_df_planning = pd.DataFrame()
     
-    # Télécharger les deux fichiers
-    df_resultats, changed_resultats = export_excel_website(url_resultats, current_df_resultats, 'Export_Resultats.xlsx')
-    df_planning, changed_planning = export_excel_website(url_planning, current_df_planning, 'Export_Planning.xlsx')
+    df_resultats, changed_resultats = export_excel_website(url_resultats, current_df_resultats, 'Export_Resultats.xlsx', academie)
+    df_planning, changed_planning = export_excel_website(url_planning, current_df_planning, 'Export_Planning.xlsx', academie)
     
     if not (changed_resultats or changed_planning):
         return current_df_resultats, current_df_planning
         
-    # Fusionner les données
     df_complet = fusionner_donnees_match(df_planning, df_resultats)
     
     matches_to_create = []
@@ -131,7 +149,6 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
         df_complet['Date'] = df_complet['Date'].astype(str)
         df_complet['Heure'] = df_complet['Heure'].astype(str)
         
-        # Conversion des colonnes booléennes
         bool_columns = ['M. Joué', 'Forf. 1', 'Forf. 2', 'F. 1 n.d.', 'F. 2 n.d.']
         for col in bool_columns:
             if col in df_complet.columns:
@@ -146,39 +163,35 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                 
                 equipe1 = str(row['Équipe 1']).strip() if pd.notna(row['Équipe 1']) else ''
                 equipe2 = str(row['Équipe 2']).strip() if pd.notna(row['Équipe 2']) else ''
-
                 
                 if pd.isna(date_heure):
-                    print(f"Date invalide ligne {index}")
+                    print(f"Date invalide ligne {index} pour {academie}")
                     continue
 
                 match_key = (
                     extraire_sport(row['Poule']),
                     date_heure.date(),
                     date_heure.time(),
-                    row['Équipe 1'].strip(),
-                    row['Équipe 2'].strip()
+                    equipe1,
+                    equipe2
                 )
                 
-                # Obtenir l'académie pour le lieu
                 lieu = row.get('Lieu', '').strip()
-                academie = 'Occitanie_Toulouse'
                 
-                # Chercher si le match existe
                 match_existant = Match.objects.filter(
                     sport=match_key[0],
                     date=match_key[1],
                     heure=match_key[2],
                     equipe1=match_key[3],
-                    equipe2=match_key[4]
+                    equipe2=match_key[4],
+                    academie=academie
                 ).first()
 
                 if match_existant:
-                    # Mettre à jour les informations du planning
                     match_existant.lieu = lieu
                     match_existant.arbitre = row.get('Arbitre(s)', '')
                     match_existant.commentaires = row.get('Commentaires', '')
-                    match_existant.academie = academie  # Ajout de l'académie
+                    match_existant.academie = academie
                     match_existant.save()
                     continue
                     
@@ -200,14 +213,14 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                     match_joue=row.get('M. Joué', False),
                     forfait_1=row.get('Forf. 1', False),
                     forfait_2=row.get('Forf. 2', False),
-                    lieu = str(row.get('Lieu', '')).strip(),
-                    academie=academie,  # Ajout de l'académie
+                    lieu=lieu,
+                    academie=academie
                 )
                 matches_to_create.append(match)
                 current_id += 1
                 
             except Exception as e:
-                print(f"Erreur ligne {index}: {str(e)}")
+                print(f"Erreur ligne {index} pour {academie}: {str(e)}")
                 continue
 
         if matches_to_create:
@@ -215,38 +228,45 @@ def import_matches_from_urls(url_resultats, url_planning, current_df_resultats=N
                 Match.objects.bulk_create(matches_to_create)
                 for match in matches_to_create:
                     creer_cotes_pour_match(match)
-            print(f"{len(matches_to_create)} nouveaux matchs créés")
+            print(f"{len(matches_to_create)} nouveaux matchs créés pour {academie}")
         else:
-            print("Aucun nouveau match à créer")
+            print(f"Aucun nouveau match à créer pour {academie}")
                 
     except Exception as e:
-        print(f"Erreur import: {str(e)}")
+        print(f"Erreur import pour {academie}: {str(e)}")
         return current_df_resultats, current_df_planning
         
     return df_resultats, df_planning
 
 class Command(BaseCommand):
-    help = 'Met à jour les matchs depuis le site FFSU avec données de planning et résultats'
+    help = 'Met à jour les matchs depuis le site FFSU avec données de planning et résultats pour toutes les académies'
 
     def handle(self, *args, **kwargs):
-        self.stdout.write('Début de la mise à jour des matchs...')
+        self.stdout.write('Début de la mise à jour des matchs pour toutes les académies...')
         
-        url_resultats = 'https://sportco.abyss-clients.com/rencontres/resultats/export?id=1&GrpId=9'
-        url_planning = 'https://sportco.abyss-clients.com/rencontres/planning/export?id=1&GrpId=9'
+        base_url_resultats = 'https://sportco.abyss-clients.com/rencontres/resultats/export?id=1&GrpId='
+        base_url_planning = 'https://sportco.abyss-clients.com/rencontres/planning/export?id=1&GrpId='
         
-        current_df_resultats = pd.DataFrame()
-        current_df_planning = pd.DataFrame()
+        for academie, grp_id in ACADEMIES_GRPID.items():
+            self.stdout.write(f'\nTraitement de l\'académie {academie}...')
+            
+            url_resultats = f"{base_url_resultats}{grp_id}"
+            url_planning = f"{base_url_planning}{grp_id}"
+            
+            current_df_resultats = pd.DataFrame()
+            current_df_planning = pd.DataFrame()
+            
+            try:
+                current_df_resultats, current_df_planning = import_matches_from_urls(
+                    url_resultats, 
+                    url_planning, 
+                    academie,
+                    current_df_resultats, 
+                    current_df_planning
+                )
+                self.stdout.write(self.style.SUCCESS(f'Mise à jour terminée avec succès pour {academie} !'))
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour pour {academie} : {str(e)}'))
+                continue
         
-        try:
-            current_df_resultats, current_df_planning = import_matches_from_urls(
-                url_resultats, 
-                url_planning, 
-                current_df_resultats, 
-                current_df_planning
-            )
-            self.stdout.write(self.style.SUCCESS('Mise à jour terminée avec succès !'))
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour : {str(e)}'))
-            return
-
-
+        self.stdout.write(self.style.SUCCESS('\nMise à jour terminée pour toutes les académies !'))
