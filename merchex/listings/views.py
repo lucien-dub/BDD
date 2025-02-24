@@ -14,6 +14,7 @@ from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from serializers.serializers import PariCreateSerializer, BetCreateSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet
+from listings.models import photo_profil
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -23,10 +24,12 @@ from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.parsers import MultiPartParser, FormParser
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer, PariSerializer, BetSerializer
+from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer
+from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer
 
 import logging
 from django.db.models import Q
@@ -186,15 +189,6 @@ class CotesAPIView(APIView):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
 
 class UsersPointsAPIView(APIView):
 
@@ -308,13 +302,25 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         print("\n=== DEBUG LOGIN ATTEMPT ===")
         print("Données reçues:", request.data)
-        print("Email reçu:", request.data.get('email'))
+        print("Utilisateur reçu:", request.data.get('usern'))
         print("Password reçu:", bool(request.data.get('password')))  # Pour la sécurité, on affiche juste si présent
         
         try:
             response = super().post(request, *args, **kwargs)
             print("Login réussi!")
+                        # Récupérer l'utilisateur à partir de l'email
+            email = request.data.get('email')
+            try:
+                user = User.objects.get(email=email)
+                # Incrémenter le compteur de connexion
+                tracker = user.login_tracker
+                tracker.increment_login_count()
+                print(f"Login tracker incrémenté pour {user.username}")
+            except Exception as e:
+                print(f"Erreur lors de l'incrémentation du login tracker: {str(e)}")
+
             return response
+        
         except Exception as e:
             print(f"Échec de login: {str(e)}")
             return Response(
@@ -369,3 +375,24 @@ class SearchMatchesAPIView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class PhotoProfilViewSet(viewsets.ModelViewSet):
+    serializer_class = PhotoProfilSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get_queryset(self):
+        # Récupère uniquement les photos de l'utilisateur authentifié
+        return photo_profil.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Associe l'utilisateur authentifié à la photo
+        # Vérifie d'abord si une photo existe déjà
+        existing_photo = photo_profil.objects.filter(user=self.request.user).first()
+        
+        if existing_photo:
+            # Si une photo existe, la supprimer
+            existing_photo.delete()
+        
+        # Créer la nouvelle photo
+        serializer.save(user=self.request.user)

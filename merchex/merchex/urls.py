@@ -23,6 +23,7 @@ router = DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'paris', PariViewSet, basename='pari')
 router.register(r'bets', BetViewSet, basename='bets')
+router.register(r'photos', views.PhotoProfilViewSet, basename='photo-profil')
 
 urlpatterns = [
     # Routes d'administration

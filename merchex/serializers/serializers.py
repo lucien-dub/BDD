@@ -11,6 +11,7 @@ from datetime import datetime, date
 from creation_bdd.creation_bdd import Match
 
 from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet
+from listings.models import photo_profil
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -122,6 +123,12 @@ class CoteSerializer(ModelSerializer):
         model = Cote
         fields = ['match','cote1','cote2','coteN']
 
+
+class PhotoProfilSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = photo_profil
+        fields = ['id', 'photo', 'date_upload']
+        read_only_fields = ['user', 'date_upload']
 
 class PariSerializer(serializers.ModelSerializer):
     match_details = MatchSerializer(source='match', read_only=True)

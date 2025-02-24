@@ -12,6 +12,8 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.conf import settings
+import os
 
 class MyManager(models.Manager):
     def custom_method(self):
@@ -390,3 +392,21 @@ def create_user_login_tracker(sender, instance, created, **kwargs):
     """Crée automatiquement un UserLoginTracker pour chaque nouvel utilisateur"""
     if created:
         UserLoginTracker.objects.create(user=instance)
+
+def user_directory_path(instance, filename):
+    # Les fichiers seront uploadés dans MEDIA_ROOT/user_<id>/<filename>
+    return f'user_{instance.user.id}/{filename}'
+
+class photo_profil(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    photo = models.ImageField(upload_to=user_directory_path, blank=True, null=True)
+    date_upload = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Photo de profil de {self.user.username}"
+    
+    @property
+    def photo_url(self):
+        if self.photo:
+            return f"{settings.MEDIA_URL}{self.photo}"
+        return None
