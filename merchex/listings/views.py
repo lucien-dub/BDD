@@ -377,7 +377,7 @@ class SearchMatchesAPIView(APIView):
         
 class PhotoProfilViewSet(viewsets.ModelViewSet):
     serializer_class = PhotoProfilSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
     
     def get_queryset(self):

@@ -11,7 +11,7 @@ from datetime import datetime, date
 from creation_bdd.creation_bdd import Match
 
 from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet
-from listings.models import photo_profil, Press
+from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -304,3 +304,9 @@ class PressSerializer(serializers.ModelSerializer):
             return value
         except Match.DoesNotExist:
             raise serializers.ValidationError("Le match spécifié n'existe pas")
+        
+
+class AcadelieSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Academie
+        fields = ['user', 'academie']

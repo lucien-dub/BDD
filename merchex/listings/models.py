@@ -429,3 +429,7 @@ class Press(models.Model):
     
     def __str__(self):
         return f"Article: {self.titre} - Match: {self.match}"
+    
+class Academie(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    academie = models.CharField(max_length=100, default='')
