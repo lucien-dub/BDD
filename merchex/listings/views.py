@@ -7,13 +7,12 @@ from django.utils import timezone
 from django.views import View
 from django.db.models import Prefetch
 
-
 from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
-from serializers.serializers import PariCreateSerializer, BetCreateSerializer
-from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet
+from serializers.serializers import PariCreateSerializer, BetCreateSerializer, PressSerializer
+from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil
 
 from rest_framework import generics
@@ -24,7 +23,7 @@ from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -396,3 +395,27 @@ class PhotoProfilViewSet(viewsets.ModelViewSet):
         
         # Créer la nouvelle photo
         serializer.save(user=self.request.user)
+
+
+class PressViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint pour créer, lire, mettre à jour et supprimer des articles de presse
+    """
+    queryset = Press.objects.all().order_by('-date_creation')
+    serializer_class = PressSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def get_queryset(self):
+        """
+        Permet de filtrer les résultats par match ou sport
+        """
+        queryset = Press.objects.all().order_by('-date_creation')
+        match_id = self.request.query_params.get('match', None)
+        sport = self.request.query_params.get('sport', None)
+        
+        if match_id is not None:
+            queryset = queryset.filter(match_id=match_id)
+        if sport is not None:
+            queryset = queryset.filter(sport__icontains=sport)
+            
+        return queryset

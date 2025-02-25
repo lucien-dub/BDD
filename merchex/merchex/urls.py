@@ -16,7 +16,12 @@ from listings.views import (
     CreateBetView,
     BetViewSet,
     VerifyBetsStatusView,
+    PressViewSet
 )
+
+from django.conf import settings
+from django.conf.urls.static import static
+
 
 # Configuration des routers
 router = DefaultRouter()
@@ -24,6 +29,7 @@ router.register(r'users', UserViewSet)
 router.register(r'paris', PariViewSet, basename='pari')
 router.register(r'bets', BetViewSet, basename='bets')
 router.register(r'photos', views.PhotoProfilViewSet, basename='photo-profil')
+router.register(r'press', PressViewSet)
 
 urlpatterns = [
     # Routes d'administration
@@ -53,3 +59,6 @@ urlpatterns = [
     path('api/bets/create/', CreateBetView.as_view(), name='create-bet'),
     path('api/verify-bets/', VerifyBetsStatusView.as_view(), name='verify-bets'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

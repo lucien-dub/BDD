@@ -11,7 +11,7 @@ from datetime import datetime, date
 from creation_bdd.creation_bdd import Match
 
 from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet
-from listings.models import photo_profil
+from listings.models import photo_profil, Press
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -287,3 +287,20 @@ class VerifyUserSerializer(serializers.Serializer):
             raise serializers.ValidationError('Mot de passe incorrect.')
 
         return {'user': user}
+    
+class PressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Press
+        fields = ['id', 'match', 'titre', 'texte', 'sport', 'photo', 'date_creation', 
+                 'date_modification', 'url_externe']
+        read_only_fields = ['date_creation', 'date_modification']
+    
+    def validate_match(self, value):
+        """
+        Vérifier que le match existe
+        """
+        try:
+            Match.objects.get(pk=value.id)
+            return value
+        except Match.DoesNotExist:
+            raise serializers.ValidationError("Le match spécifié n'existe pas")

@@ -410,3 +410,22 @@ class photo_profil(models.Model):
         if self.photo:
             return f"{settings.MEDIA_URL}{self.photo}"
         return None
+    
+
+class Press(models.Model):
+    match = models.ForeignKey('Match', on_delete=models.CASCADE, verbose_name="Match associé")
+    titre = models.CharField(max_length=200, verbose_name="Titre")
+    texte = models.TextField(verbose_name="Description du match")
+    sport = models.CharField(max_length=100, verbose_name="Sport")
+    photo = models.ImageField(upload_to='press_photos/', blank=True, null=True, verbose_name="Photo du match")
+    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+    date_modification = models.DateTimeField(auto_now=True, verbose_name="Dernière modification")
+    url_externe = models.URLField(blank=True, null=True, verbose_name="URL externe")
+    
+    class Meta:
+        verbose_name = "Article de presse"
+        verbose_name_plural = "Articles de presse"
+        ordering = ['-date_creation']
+    
+    def __str__(self):
+        return f"Article: {self.titre} - Match: {self.match}"
