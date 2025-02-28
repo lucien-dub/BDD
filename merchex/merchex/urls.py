@@ -16,7 +16,8 @@ from listings.views import (
     CreateBetView,
     BetViewSet,
     VerifyBetsStatusView,
-    PressViewSet
+    PressViewSet,
+    AcademieViewSet
 )
 
 from django.conf import settings
@@ -30,6 +31,7 @@ router.register(r'paris', PariViewSet, basename='pari')
 router.register(r'bets', BetViewSet, basename='bets')
 router.register(r'photos', views.PhotoProfilViewSet, basename='photo-profil')
 router.register(r'press', PressViewSet)
+router.register(r'academies', AcademieViewSet, basename='academie')
 
 urlpatterns = [
     # Routes d'administration

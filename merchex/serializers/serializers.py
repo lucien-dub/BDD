@@ -306,7 +306,8 @@ class PressSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Le match spécifié n'existe pas")
         
 
-class AcadelieSerializer(serializers.ModelSerializer):
+class AcademieSerializer(serializers.ModelSerializer):
     class Meta:
         model = Academie
-        fields = ['user', 'academie']
+        fields = ['id', 'user', 'academie']
+        read_only_fields = ['user']

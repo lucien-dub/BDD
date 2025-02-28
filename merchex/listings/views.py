@@ -13,12 +13,12 @@ from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from serializers.serializers import PariCreateSerializer, BetCreateSerializer, PressSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
-from listings.models import photo_profil
+from listings.models import photo_profil, Academie
 
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.decorators import APIView
+from rest_framework.decorators import APIView, api_view
 from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
@@ -28,13 +28,14 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer
-from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer
+from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer
 
 import logging
 from django.db.models import Q
 from django.core.paginator import Paginator
+import json
 
-import logging
+from datetime import timedelta
 
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')
@@ -178,12 +179,46 @@ class MatchsAPIView(APIView):
         serializer = MatchSerializer(match, many=True)
         return Response(serializer.data)
 
-class CotesAPIView(APIView):
+logger = logging.getLogger(__name__)
 
-    def get(self, *args, **kwargs):
-        cote = Cote.objects.all()
-        serializer = CoteSerializer(cote, many=True)
-        return Response(serializer.data)
+class CotesAPIView(APIView):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Paramètre optionnel pour spécifier un match précis
+            match_id = request.query_params.get('match_id', None)
+            
+            if match_id:
+                # Recalculer les cotes pour un match spécifique
+                try:
+                    # Vérifier si le match existe
+                    if not Match.objects.filter(id=match_id).exists():
+                        return Response({'erreur': f"Le match avec l'ID {match_id} n'existe pas."}, status=404)
+                    
+                    calculer_cotes(match_id)
+                    
+                    # Récupérer les cotes mises à jour
+                    cote = Cote.objects.filter(match_id=match_id)
+                    if cote.exists():
+                        serializer = CoteSerializer(cote, many=True)
+                        return Response(serializer.data)
+                    else:
+                        return Response({'erreur': "Aucune cote trouvée pour ce match."}, status=404)
+                        
+                except ImportError as e:
+                    logger.error(f"Erreur d'importation: {str(e)}")
+                    return Response({'erreur': "Module de calcul des cotes non trouvé."}, status=500)
+                except Exception as e:
+                    logger.error(f"Erreur lors du calcul des cotes: {str(e)}")
+                    return Response({'erreur': f"Erreur lors du calcul des cotes: {str(e)}"}, status=500)
+            else:
+                # Juste renvoyer toutes les cotes sans recalcul
+                cotes = Cote.objects.all()
+                serializer = CoteSerializer(cotes, many=True)
+                return Response(serializer.data)
+                
+        except Exception as e:
+            logger.error(f"Erreur non gérée dans l'API: {str(e)}")
+            return Response({'erreur': f"Une erreur inattendue s'est produite: {str(e)}"}, status=500)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -419,3 +454,29 @@ class PressViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(sport__icontains=sport)
             
         return queryset
+
+from django.http import JsonResponse
+from rest_framework.response import Response
+
+
+class AcademieViewSet(viewsets.ModelViewSet):
+    serializer_class = AcademieSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Retourne seulement les académies de l'utilisateur connecté
+        return Academie.objects.filter(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        # Ajoute automatiquement l'utilisateur actuel lors de la création
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=self.request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

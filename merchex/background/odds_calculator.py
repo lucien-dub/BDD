@@ -2,7 +2,7 @@ from django.db.models import Avg, Count, F
 from datetime import datetime, timedelta
 from django.utils import timezone
 import math
-from listings.models import Match, Cote
+from listings.models import Match, Cote, Pari
 
 def calculer_cotes(match_id):
     """
@@ -19,6 +19,23 @@ def calculer_cotes(match_id):
             niveau=match.niveau
         )
         
+        pari = Pari.objects.get(match.id ==match_id)
+
+        if pari != []:
+            v1 = 0
+            v2 = 0
+            vN = 0
+            for p in pari:
+                sel = p.match.selection
+                if sel == '1':
+                    v1 += 1
+                elif sel == '2':
+                    v2 += 1
+                elif sel == 'N':
+                    vN += 1
+
+        vtot = v1 + v2 + vN
+
         # Statistiques équipe 1
         stats_eq1 = historique.filter(equipe1=match.equipe1)
         victoires_eq1 = stats_eq1.filter(score1__gt=F('score2')).count()
@@ -31,9 +48,9 @@ def calculer_cotes(match_id):
         
         # Calcul des probabilités
         if matches_eq1 > 0 and matches_eq2 > 0:
-            prob_eq1 = victoires_eq1 / matches_eq1
-            prob_eq2 = victoires_eq2 / matches_eq2
-            prob_nul = 1 - (prob_eq1 + prob_eq2)
+            prob_eq1 = victoires_eq1 / matches_eq1 + v1/vtot
+            prob_eq2 = victoires_eq2 / matches_eq2 + v2/vtot
+            prob_nul = 1 - (prob_eq1 + prob_eq2) + vN/vtot
             
             total_prob = prob_eq1 + prob_eq2 + prob_nul
             if total_prob > 0:
@@ -50,7 +67,8 @@ def calculer_cotes(match_id):
             # Cotes par défaut
             cote1 = cote2 = 2.5
             coteN = 3.0
-        
+
+
         # Mise à jour ou création
         cote, created = Cote.objects.update_or_create(
             match=match,
