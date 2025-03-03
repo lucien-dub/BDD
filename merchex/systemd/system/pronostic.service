@@ -1,0 +1,23 @@
+[Unit]
+Description=Gunicorn service pour l'application de pronostics sportifs
+After=network.target
+
+[Service]
+User=pronostic_app
+Group=pronostic_app
+WorkingDirectory=/merchex
+ExecStart=/BDD/venv-serveur/bin/gunicorn \
+          --config /merchex/gunicorn_config.py \
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=ubuntu
+
+# Sécurité renforcée (adaptée pour permettre l'accès au fichier SQLite)
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+ReadWritePaths=/merchex/data
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
