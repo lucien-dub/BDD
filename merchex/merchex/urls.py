@@ -46,7 +46,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     # Routes API principales
-    path('https://213.32.91.54/api/', include(router.urls)),  # Inclut toutes les routes du router
+    path('api/', include(router.urls)),  # Inclut toutes les routes du router
     
     # Routes pour les matchs et cotes
     path('api/matchs/', MatchsAPIView.as_view()),
