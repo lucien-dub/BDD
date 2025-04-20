@@ -33,9 +33,9 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Paramètres de sécurité recommandés
-SESSION_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-CSRF_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-SECURE_SSL_REDIRECT = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
 # Application definition
 
@@ -106,13 +106,14 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:8100",
-#     "http://127.0.0.1:8100",
-# ]
-
+CORS_ALLOWED_ORIGINS = [
+    "https://campus-league.com",
+    "https://www.campus-league.com",
+    "http://campus-league.com",
+    "http://www.campus-league.com",
+]
 from datetime import timedelta
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id', 
