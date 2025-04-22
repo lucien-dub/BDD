@@ -436,7 +436,8 @@ class Academie(models.Model):
     academie = models.CharField(max_length=100, default='')
 
 
-class User(AbstractUser):
+class Verifications(AbstractUser):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     email_verified = models.BooleanField(default=False)
     accept_terms = models.BooleanField(default=False)
 

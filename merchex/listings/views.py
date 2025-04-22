@@ -327,19 +327,60 @@ class VerifyBetsStatusView(APIView):
                 'error': 'Erreur lors de la vérification des paris',
                 'details': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-
+        
 class RegisterView(APIView):
-    permission_classes = (permissions.AllowAny,)
-
     def post(self, request):
-        serializer = UserSerializer(data=request.data)
+        serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            return Response({
-                'user': UserSerializer(user).data,
-                'message': 'Inscription réussie!'
-            }, status=status.HTTP_201_CREATED)
+            
+            # Création du token de vérification
+            verification_token = EmailVerificationToken.objects.create(user=user)
+            
+            # Construction de l'URL de vérification
+            verification_url = request.build_absolute_uri(
+                reverse('verify-email', kwargs={'token': verification_token.token})
+            )
+            
+            # Envoi de l'email de vérification
+            self.send_verification_email(user, verification_url)
+            
+            return Response(
+                {'message': 'Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.'},
+                status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def send_verification_email(self, user, verification_url):
+        subject = 'Vérification de votre adresse email'
+        html_message = render_to_string('email_verification.html', {
+            'user': user,
+            'verification_url': verification_url
+        })
+        plain_message = strip_tags(html_message)
+        
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False
+        )
+
+
+# class RegisterView(APIView):
+#     permission_classes = (permissions.AllowAny,)
+
+#     def post(self, request):
+#         serializer = UserSerializer(data=request.data)
+#         if serializer.is_valid():
+#             user = serializer.save()
+#             return Response({
+#                 'user': UserSerializer(user).data,
+#                 'message': 'Inscription réussie!'
+#             }, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -492,45 +533,6 @@ class AcademieViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(serializer.data)
     
-class RegisterView(APIView):
-    def post(self, request):
-        serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            
-            # Création du token de vérification
-            verification_token = EmailVerificationToken.objects.create(user=user)
-            
-            # Construction de l'URL de vérification
-            verification_url = request.build_absolute_uri(
-                reverse('verify-email', kwargs={'token': verification_token.token})
-            )
-            
-            # Envoi de l'email de vérification
-            self.send_verification_email(user, verification_url)
-            
-            return Response(
-                {'message': 'Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.'},
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def send_verification_email(self, user, verification_url):
-        subject = 'Vérification de votre adresse email'
-        html_message = render_to_string('email_verification.html', {
-            'user': user,
-            'verification_url': verification_url
-        })
-        plain_message = strip_tags(html_message)
-        
-        send_mail(
-            subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False
-        )
 
 class VerifyEmailView(APIView):
     def get(self, request, token):
