@@ -230,3 +230,18 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'ssl0.ovh.net'  # ex: smtp.gmail.com
+EMAIL_PORT = 587  # Port standard pour TLS
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'alexandre.montariol@campus-league.com'
+EMAIL_HOST_PASSWORD = 'MinesBetIndustrie12!'  # Utilisez des variables d'environnement en production
+DEFAULT_FROM_EMAIL = 'alexandre.montariol@campus-league.com'
+
+# Pour le développement, vous pouvez utiliser l'option de console pour voir les emails dans la console:
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Paramètres de l'application
+EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérificatio
+

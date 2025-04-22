@@ -1,3 +1,4 @@
+#merchex/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -17,7 +18,8 @@ from listings.views import (
     BetViewSet,
     VerifyBetsStatusView,
     PressViewSet,
-    AcademieViewSet
+    AcademieViewSet,
+    VerifyEmailView, ResendVerificationEmailView, LoginView
 )
 
 from django.conf import settings
@@ -41,9 +43,11 @@ urlpatterns = [
     # Routes d'authentification
     path('api-auth/', include('rest_framework.urls')),
     path('api/register/', RegisterView.as_view(), name='register'),
-    path('api/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/login/', LoginView.as_view(), name='login'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/verify-email/<str:token>/', VerifyEmailView.as_view(), name='verify-email'),
+    path('api/resend-verification-email/', ResendVerificationEmailView.as_view(), name='resend-verification-email'),
     
     # Routes API principales
     path('api/', include(router.urls)),  # Inclut toutes les routes du router

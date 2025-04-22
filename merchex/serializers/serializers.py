@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken
 from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
@@ -311,3 +311,36 @@ class AcademieSerializer(serializers.ModelSerializer):
         model = Academie
         fields = ['id', 'user', 'academie']
         read_only_fields = ['user']
+
+class UserRegistrationSerializer(UserSerializer):
+    confirm_password = serializers.CharField(write_only=True)
+    accept_terms = serializers.BooleanField(required=True)
+    
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'confirm_password', 'accept_terms']
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'email': {'required': True}
+        }
+    
+    def validate(self, data):
+        if data['password'] != data.pop('confirm_password'):
+            raise serializers.ValidationError({'confirm_password': 'Les mots de passe ne correspondent pas'})
+        
+        if not data['accept_terms']:
+            raise serializers.ValidationError({'accept_terms': 'Vous devez accepter les conditions générales d\'utilisation'})
+        
+        return data
+    
+    def create(self, validated_data):
+        accept_terms = validated_data.pop('accept_terms', False)
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+        )
+        user.accept_terms = accept_terms
+        user.email_verified = False
+        user.save()
+        return user

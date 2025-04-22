@@ -5,8 +5,9 @@ from django.contrib.auth.models import User
 from django.db.models import Sum
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.utils.crypto import get_random_string
 from django.utils import timezone
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from django.db import models
 from django.core.exceptions import ValidationError
 from decimal import Decimal
@@ -433,3 +434,26 @@ class Press(models.Model):
 class Academie(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     academie = models.CharField(max_length=100, default='')
+
+
+class User(AbstractUser):
+    email_verified = models.BooleanField(default=False)
+    accept_terms = models.BooleanField(default=False)
+
+class EmailVerificationToken(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE,related_name='verification_token')
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = get_random_string(64)
+        
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(days=2)
+            
+        super().save(*args, **kwargs)
+    
+    def is_valid(self):
+        return timezone.now() <= self.expires_at

@@ -1,3 +1,4 @@
+#listings/views.py
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -6,14 +7,28 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.views import View
 from django.db.models import Prefetch
+from django.conf import settings
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.shortcuts import get_object_or_404
+from django.urls import reverse
+
+from rest_framework import status
+
+
 
 from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from serializers.serializers import PariCreateSerializer, BetCreateSerializer, PressSerializer
+from serializers.serializers import CustomTokenObtainPairSerializer, PariListSerializer,VerifyUserSerializer
+from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer, UserRegistrationSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil, Academie
+from listings.models import User, EmailVerificationToken
+
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -24,11 +39,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-
-from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from serializers.serializers import UserSerializer, CustomTokenObtainPairSerializer, PariListSerializer
-from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer
 
 import logging
 from django.db.models import Q
@@ -480,3 +491,136 @@ class AcademieViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+    
+class RegisterView(APIView):
+    def post(self, request):
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            
+            # Création du token de vérification
+            verification_token = EmailVerificationToken.objects.create(user=user)
+            
+            # Construction de l'URL de vérification
+            verification_url = request.build_absolute_uri(
+                reverse('verify-email', kwargs={'token': verification_token.token})
+            )
+            
+            # Envoi de l'email de vérification
+            self.send_verification_email(user, verification_url)
+            
+            return Response(
+                {'message': 'Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.'},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def send_verification_email(self, user, verification_url):
+        subject = 'Vérification de votre adresse email'
+        html_message = render_to_string('email_verification.html', {
+            'user': user,
+            'verification_url': verification_url
+        })
+        plain_message = strip_tags(html_message)
+        
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False
+        )
+
+class VerifyEmailView(APIView):
+    def get(self, request, token):
+        verification_token = get_object_or_404(EmailVerificationToken, token=token)
+        
+        if not verification_token.is_valid():
+            return Response(
+                {'message': 'Le lien de vérification a expiré. Veuillez demander un nouveau lien.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user = verification_token.user
+        user.email_verified = True
+        user.save()
+        
+        # Suppression du token après utilisation
+        verification_token.delete()
+        
+        # Rediriger vers une page de confirmation ou renvoyer une réponse
+        return Response({'message': 'Votre email a été vérifié avec succès. Vous pouvez maintenant vous connecter.'})
+
+class ResendVerificationEmailView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response(
+                {'message': 'L\'email est requis.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Pour des raisons de sécurité, ne pas indiquer que l'utilisateur n'existe pas
+            return Response({'message': 'Si votre email est enregistré, un nouveau lien de vérification vous a été envoyé.'})
+        
+        if user.email_verified:
+            return Response({'message': 'Votre email est déjà vérifié. Vous pouvez vous connecter.'})
+        
+        # Supprime l'ancien token s'il existe
+        EmailVerificationToken.objects.filter(user=user).delete()
+        
+        # Création d'un nouveau token
+        verification_token = EmailVerificationToken.objects.create(user=user)
+        
+        # Construction de l'URL de vérification
+        verification_url = request.build_absolute_uri(
+            reverse('verify-email', kwargs={'token': verification_token.token})
+        )
+        
+        # Envoi de l'email
+        subject = 'Nouveau lien de vérification de votre adresse email'
+        html_message = render_to_string('email_verification_resend.html', {
+            'user': user,
+            'verification_url': verification_url
+        })
+        plain_message = strip_tags(html_message)
+        
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False
+        )
+        
+        return Response({'message': 'Un nouveau lien de vérification a été envoyé à votre adresse email.'})
+
+class LoginView(APIView):
+    def post(self, request):
+        serializer = VerifyUserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            
+            # Vérifier si l'email est vérifié
+            if not user.email_verified:
+                return Response(
+                    {'detail': 'Email non vérifié.', 'email_verification_required': True},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Continuer avec votre logique d'authentification existante
+            # Par exemple, en utilisant CustomTokenObtainPairSerializer
+            token_serializer = CustomTokenObtainPairSerializer(data={
+                'username': user.username,
+                'password': request.data.get('password')
+            })
+            token_serializer.is_valid(raise_exception=True)
+            
+            return Response(token_serializer.validated_data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
