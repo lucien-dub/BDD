@@ -436,13 +436,32 @@ class Academie(models.Model):
     academie = models.CharField(max_length=100, default='')
 
 
-class Verifications(AbstractUser):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+class Verification(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='verification')
     email_verified = models.BooleanField(default=False)
     accept_terms = models.BooleanField(default=False)
 
+    # Add these to fix the clash
+    groups = models.ManyToManyField(
+        'auth.Group',
+        related_name='verification_user_set',
+        blank=True,
+        verbose_name=_('groups'),
+        help_text=_(
+            'The groups this user belongs to. A user will get all permissions '
+            'granted to each of their groups.'
+        ),
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='verification_user_set',
+        blank=True,
+        verbose_name=_('user permissions'),
+        help_text=_('Specific permissions for this user.'),
+    )
+
 class EmailVerificationToken(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE,related_name='verification_token')
+    user = models.ForeignKey(User, on_delete=models.CASCADE,related_name='verification_token')
     token = models.CharField(max_length=64, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
