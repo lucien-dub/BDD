@@ -270,24 +270,28 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
 
 class VerifyUserSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    username = serializers.CharField()  # <-- Modifié de email à username
     password = serializers.CharField()
-
+    
     def validate(self, attrs):
-        username = attrs.get('email')
+        username = attrs.get('username')
         password = attrs.get('password')
-
         User = get_user_model()
+        
         try:
-            user = User.objects.get(username=username)  # Utilise l'email pour rechercher l'utilisateur
+            # Si vous identifiez les utilisateurs par email dans votre base de données
+            if '@' in username:
+                user = User.objects.get(email=username)
+            else:
+                user = User.objects.get(username=username)
         except User.DoesNotExist:
             raise serializers.ValidationError('Utilisateur non trouvé.')
-
+            
         if not user.check_password(password):
             raise serializers.ValidationError('Mot de passe incorrect.')
+        return {'user': user}   
 
-        return {'user': user}
-    
+
 class PressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Press
