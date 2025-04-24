@@ -26,7 +26,7 @@ from serializers.serializers import PariCreateSerializer, BetCreateSerializer, P
 from serializers.serializers import CustomTokenObtainPairSerializer, PariListSerializer,VerifyUserSerializer
 from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer, UserRegistrationSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
-from listings.models import photo_profil, Academie
+from listings.models import photo_profil, Academie, Verification
 from listings.models import User, EmailVerificationToken
 
 
@@ -607,14 +607,15 @@ class LoginView(APIView):
         serializer = VerifyUserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            
+
             # Vérifier si l'email est vérifié
-            if not user.email_verified:
+            verification = Verification.objects.get(user=user)
+            if not verification.email_verified:
                 return Response(
                     {'detail': 'Email non vérifié.', 'email_verification_required': True},
                     status=status.HTTP_403_FORBIDDEN
                 )
-            
+
             # Continuer avec votre logique d'authentification existante
             # Par exemple, en utilisant CustomTokenObtainPairSerializer
             token_serializer = CustomTokenObtainPairSerializer(data={
@@ -622,7 +623,7 @@ class LoginView(APIView):
                 'password': request.data.get('password')
             })
             token_serializer.is_valid(raise_exception=True)
-            
+
             return Response(token_serializer.validated_data)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
