@@ -270,16 +270,16 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
 
 class VerifyUserSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    username = serializers.CharField()
     password = serializers.CharField()
 
     def validate(self, attrs):
-        email = attrs.get('email')
+        username = attrs.get('email')
         password = attrs.get('password')
 
         User = get_user_model()
         try:
-            user = User.objects.get(email=email)  # Utilise l'email pour rechercher l'utilisateur
+            user = User.objects.get(username=username)  # Utilise l'email pour rechercher l'utilisateur
         except User.DoesNotExist:
             raise serializers.ValidationError('Utilisateur non trouvé.')
 
