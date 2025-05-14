@@ -243,5 +243,5 @@ DEFAULT_FROM_EMAIL = 'alexandre.montariol@campus-league.com'
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Paramètres de l'application
-EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérificatio
+EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérification
 

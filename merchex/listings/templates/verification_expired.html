@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lien de vérification expiré</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .error-container {
+            padding: 30px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            margin-top: 40px;
+        }
+        .logo {
+            max-height: 80px;
+            margin-bottom: 20px;
+        }
+        .error-icon {
+            color: #d13030;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .button {
+            background-color: #d13030;
+            color: white;
+            padding: 12px 25px;
+            text-decoration: none;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <img src="/static/logo.png" alt="Logo" class="logo">
+        
+        <div class="error-icon">!</div>
+        
+        <h1>Lien de vérification expiré</h1>
+        
+        <p>{{ error }}</p>
+        <p>Pour recevoir un nouveau lien de vérification, veuillez vous connecter puis demander un nouveau lien.</p>
+        
+        <a href="/login" class="button">Se connecter</a>
+    </div>
+</body>
+</html>
