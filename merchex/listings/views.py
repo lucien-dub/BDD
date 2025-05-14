@@ -4,6 +4,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate,login
 from django.utils import timezone
 from django.views import View
 from django.db.models import Prefetch
@@ -27,7 +28,7 @@ from serializers.serializers import CustomTokenObtainPairSerializer, PariListSer
 from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer, UserRegistrationSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil, Academie, Verification
-from listings.models import User, EmailVerificationToken
+from listings.models import User, EmailVerificationToken, UserLoginTracker
 
 
 from rest_framework import generics
@@ -328,36 +329,56 @@ class VerifyBetsStatusView(APIView):
                 'details': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from django.db import transaction
+
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
-    
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        
-        # Créer l'objet de vérification
-        verification = Verification.objects.create(
-            user=user,
-            email_verified=False,
-            accept_terms=request.data.get('accept_terms', False)
-        )
-        
-        # Envoyer l'email de vérification
+
         try:
+            user = serializer.save()
+
+            # Vérifiez si 'accept_terms' est présent dans les données de la requête
+            accept_terms = request.data.get('accept_terms', False)
+            if accept_terms not in [True, False]:
+                return Response(
+                    {"error": "Le champ 'accept_terms' doit être un booléen."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Créer l'objet de vérification
+            verification = Verification.objects.create(
+                user=user,
+                email_verified=False,
+                accept_terms=accept_terms
+            )
+
+            # Envoyer l'email de vérification
             send_verification_email(user)
+
             return Response(
                 {"message": "Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte."},
                 status=status.HTTP_201_CREATED
             )
-        except Exception as e:
+
+        except Verification.DoesNotExist:
             return Response(
-                {"error": f"Erreur lors de l'envoi de l'email: {str(e)}"},
+                {"error": "Erreur lors de la création de l'objet de vérification."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+        except Exception as e:
+            return Response(
+                {"error": f"Une erreur inattendue est survenue: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # class RegisterView(APIView):
 #     permission_classes = (permissions.AllowAny,)
@@ -635,14 +656,14 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        user = user.authenticate(request, username=username, password=password)
+        user = authenticate(request, username=username, password=password)
         
         if user is None:
             # Essayer d'authentifier avec l'email
             try:
                 if '@' in username:
                     user_obj = User.objects.get(email=username)
-                    user = user.authenticate(request, username=user_obj.username, password=password)
+                    user = authenticate(request, username=user_obj.username, password=password)
             except User.DoesNotExist:
                 pass
         
@@ -657,14 +678,14 @@ class LoginView(APIView):
             
             # Mettre à jour le compteur de connexion
             try:
-                login_tracker = user.UserLoginTracker.objects.get(user=user)
+                login_tracker = UserLoginTracker.objects.get(user=user)
                 login_tracker.increment_login_count()
-            except user.UserLoginTracker.DoesNotExist:
-                login_tracker = user.UserLoginTracker.objects.create(user=user)
+            except UserLoginTracker.DoesNotExist:
+                login_tracker = UserLoginTracker.objects.create(user=user)
                 login_tracker.increment_login_count()
             
             # Connecter l'utilisateur
-            user.login(request, user)
+            login(request, user)
             
             # Créer un token JWT
             serializer = CustomTokenObtainPairSerializer()

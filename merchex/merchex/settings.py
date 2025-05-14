@@ -33,9 +33,9 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Paramètres de sécurité recommandés
-SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SESSION_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+CSRF_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SECURE_SSL_REDIRECT = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
 # Application definition
 
@@ -108,12 +108,12 @@ AUTHENTICATION_BACKENDS = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = [
-    "https://campus-league.com",
-    "https://www.campus-league.com",
-    "http://campus-league.com",
-    "http://www.campus-league.com",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "https://campus-league.com",
+#     "https://www.campus-league.com",
+#     "http://campus-league.com",
+#     "http://www.campus-league.com",
+# ]
 from datetime import timedelta
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id', 
@@ -176,33 +176,33 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': '/home/ubuntu/BDD/merchex/logs/django.log',  # Remplacez par le chemin souhaité
-        },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-        'django.request': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-    },
-}
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': '/home/ubuntu/BDD/merchex/logs/django.log',  # Remplacez par le chemin souhaité
+#         },
+#         'console': {
+#             'level': 'DEBUG',
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'django.request': {
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
 
 
 MEDIA_URL = '/media/'
