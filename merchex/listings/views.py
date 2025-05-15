@@ -4,6 +4,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate,login
 from django.utils import timezone
 from django.views import View
 from django.db.models import Prefetch
@@ -27,7 +28,7 @@ from serializers.serializers import CustomTokenObtainPairSerializer, PariListSer
 from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer, UserRegistrationSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil, Academie, Verification
-from listings.models import User, EmailVerificationToken
+from listings.models import User, EmailVerificationToken, UserLoginTracker
 
 
 from rest_framework import generics
@@ -328,46 +329,56 @@ class VerifyBetsStatusView(APIView):
                 'details': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         
-class RegisterView(APIView):
-    def post(self, request):
-        serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from django.db import transaction
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [permissions.AllowAny]
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
             user = serializer.save()
-            
-            # Création du token de vérification
-            verification_token = EmailVerificationToken.objects.create(user=user)
-            
-            # Construction de l'URL de vérification
-            verification_url = request.build_absolute_uri(
-                reverse('verify-email', kwargs={'token': verification_token.token})
+
+            # Vérifiez si 'accept_terms' est présent dans les données de la requête
+            accept_terms = request.data.get('accept_terms', False)
+            if accept_terms not in [True, False]:
+                return Response(
+                    {"error": "Le champ 'accept_terms' doit être un booléen."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Créer l'objet de vérification
+            verification = Verification.objects.create(
+                user=user,
+                email_verified=False,
+                accept_terms=accept_terms
             )
-            
-            # Envoi de l'email de vérification
-            self.send_verification_email(user, verification_url)
-            
+
+            # Envoyer l'email de vérification
+            send_verification_email(user)
+
             return Response(
-                {'message': 'Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.'},
+                {"message": "Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte."},
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def send_verification_email(self, user, verification_url):
-        subject = 'Vérification de votre adresse email'
-        html_message = render_to_string('email_verification.html', {
-            'user': user,
-            'verification_url': verification_url
-        })
-        plain_message = strip_tags(html_message)
-        
-        send_mail(
-            subject=subject,
-            message=plain_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False
-        )
 
+        except Verification.DoesNotExist:
+            return Response(
+                {"error": "Erreur lors de la création de l'objet de vérification."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Une erreur inattendue est survenue: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # class RegisterView(APIView):
 #     permission_classes = (permissions.AllowAny,)
@@ -536,94 +547,267 @@ class AcademieViewSet(viewsets.ModelViewSet):
 
 class VerifyEmailView(APIView):
     def get(self, request, token):
-        verification_token = get_object_or_404(EmailVerificationToken, token=token)
+        try:
+            verification_token = get_object_or_404(EmailVerificationToken, token=token)
+           
+            if not verification_token.is_valid():
+                return render(request, 'verification_expired.html', {
+                    'error': 'Le lien de vérification a expiré. Veuillez demander un nouveau lien.'
+                })
+           
+            user = verification_token.user
+            
+            # Mettre à jour l'objet Verification au lieu de user.email_verified
+            verification, created = Verification.objects.get_or_create(user=user)
+            verification.email_verified = True
+            verification.save()
+           
+            # Suppression du token après utilisation
+            verification_token.delete()
+           
+            # Rediriger vers une page de confirmation HTML
+            return render(request, 'verification_success.html')
+        except EmailVerificationToken.DoesNotExist:
+            return render(request, 'verification_expired.html', {
+                'error': 'Lien de vérification invalide ou expiré.'
+            })
         
-        if not verification_token.is_valid():
-            return Response(
-                {'message': 'Le lien de vérification a expiré. Veuillez demander un nouveau lien.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        user = verification_token.user
-        user.email_verified = True
-        user.save()
-        
-        # Suppression du token après utilisation
-        verification_token.delete()
-        
-        # Rediriger vers une page de confirmation ou renvoyer une réponse
-        return Response({'message': 'Votre email a été vérifié avec succès. Vous pouvez maintenant vous connecter.'})
-
-class ResendVerificationEmailView(APIView):
+class ForgotPasswordView(APIView):
+    """Vue pour demander un lien de réinitialisation de mot de passe"""
+    permission_classes = []
+    
     def post(self, request):
         email = request.data.get('email')
+        
         if not email:
             return Response(
-                {'message': 'L\'email est requis.'},
+                {"error": "L'adresse email est requise."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
             user = User.objects.get(email=email)
+            
+            # Vérifier si l'email est vérifié
+            verification = getattr(user, 'verification', None)
+            if not verification or not verification.email_verified:
+                return Response(
+                    {"error": "Veuillez d'abord vérifier votre adresse email."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Envoyer l'email de réinitialisation
+            self.send_password_reset_email(user, request)
+            
+            return Response(
+                {"message": "Si cette adresse email est associée à un compte, un lien de réinitialisation y a été envoyé."},
+                status=status.HTTP_200_OK
+            )
         except User.DoesNotExist:
-            # Pour des raisons de sécurité, ne pas indiquer que l'utilisateur n'existe pas
-            return Response({'message': 'Si votre email est enregistré, un nouveau lien de vérification vous a été envoyé.'})
-        
-        if user.email_verified:
-            return Response({'message': 'Votre email est déjà vérifié. Vous pouvez vous connecter.'})
-        
-        # Supprime l'ancien token s'il existe
+            # Pour des raisons de sécurité, ne pas indiquer si l'email existe ou non
+            return Response(
+                {"message": "Si cette adresse email est associée à un compte, un lien de réinitialisation y a été envoyé."},
+                status=status.HTTP_200_OK
+            )
+    
+    def send_password_reset_email(self, user, request):
+        # Supprimer les tokens existants pour cet utilisateur
         EmailVerificationToken.objects.filter(user=user).delete()
         
-        # Création d'un nouveau token
-        verification_token = EmailVerificationToken.objects.create(user=user)
+        # Créer un nouveau token
+        token = EmailVerificationToken.objects.create(user=user)
         
-        # Construction de l'URL de vérification
-        verification_url = request.build_absolute_uri(
-            reverse('verify-email', kwargs={'token': verification_token.token})
+        # Construire l'URL de réinitialisation
+        reset_url = request.build_absolute_uri(
+            reverse('reset-password', kwargs={'token': token.token})
         )
         
-        # Envoi de l'email
-        subject = 'Nouveau lien de vérification de votre adresse email'
-        html_message = render_to_string('email_verification_resend.html', {
+        # Rendre le template HTML
+        html_message = render_to_string('password_reset_email.html', {
             'user': user,
-            'verification_url': verification_url
+            'reset_url': reset_url,
         })
+        
+        # Version texte simple
         plain_message = strip_tags(html_message)
         
+        # Envoyer l'email
         send_mail(
-            subject=subject,
+            subject='Réinitialisation de votre mot de passe',
             message=plain_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             html_message=html_message,
-            fail_silently=False
+            fail_silently=False,
         )
         
-        return Response({'message': 'Un nouveau lien de vérification a été envoyé à votre adresse email.'})
-
+        return token
+    
 class LoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+    
     def post(self, request):
-        serializer = VerifyUserSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-
+        username = request.data.get('username')
+        password = request.data.get('password')
+        
+        if not username or not password:
+            return Response(
+                {"error": "Le nom d'utilisateur et le mot de passe sont requis."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user = authenticate(request, username=username, password=password)
+        
+        if user is None:
+            # Essayer d'authentifier avec l'email
+            try:
+                if '@' in username:
+                    user_obj = User.objects.get(email=username)
+                    user = authenticate(request, username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                pass
+        
+        if user is not None:
             # Vérifier si l'email est vérifié
-            verification = Verification.objects.get(user=user)
-            if not verification.email_verified:
+            verification = getattr(user, 'verification', None)
+            if not verification or not verification.email_verified:
                 return Response(
-                    {'detail': 'Email non vérifié.', 'email_verification_required': True},
+                    {"error": "Veuillez vérifier votre adresse email avant de vous connecter."},
                     status=status.HTTP_403_FORBIDDEN
                 )
-
-            # Continuer avec votre logique d'authentification existante
-            # Par exemple, en utilisant CustomTokenObtainPairSerializer
-            token_serializer = CustomTokenObtainPairSerializer(data={
-                'username': user.username,
-                'password': request.data.get('password')
+            
+            # Mettre à jour le compteur de connexion
+            try:
+                login_tracker = UserLoginTracker.objects.get(user=user)
+                login_tracker.increment_login_count()
+            except UserLoginTracker.DoesNotExist:
+                login_tracker = UserLoginTracker.objects.create(user=user)
+                login_tracker.increment_login_count()
+            
+            # Connecter l'utilisateur
+            login(request, user)
+            
+            # Créer un token JWT
+            serializer = CustomTokenObtainPairSerializer()
+            token = serializer.get_token(user)
+            
+            return Response({
+                'access': str(token.access_token),
+                'refresh': str(token),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email
+                }
             })
-            token_serializer.is_valid(raise_exception=True)
-
-            return Response(token_serializer.validated_data)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(
+            {"error": "Identifiants invalides."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+class ResetPasswordView(APIView):
+    """Vue pour réinitialiser le mot de passe avec un token"""
+    permission_classes = []
+    
+    def get(self, request, token):
+        try:
+            token_obj = EmailVerificationToken.objects.get(token=token)
+            
+            if not token_obj.is_valid():
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
+                })
+            
+            return render(request, 'password_reset_form.html')
+        except EmailVerificationToken.DoesNotExist:
+            return render(request, 'password_reset_form.html', {
+                'error': 'Lien de réinitialisation invalide ou expiré.'
+            })
+    
+    def post(self, request, token):
+        try:
+            token_obj = EmailVerificationToken.objects.get(token=token)
+            
+            if not token_obj.is_valid():
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
+                })
+            
+            password = request.POST.get('password')
+            confirm_password = request.POST.get('confirm_password')
+            
+            if not password or not confirm_password:
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Les deux champs de mot de passe sont requis.'
+                })
+            
+            if password != confirm_password:
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Les mots de passe ne correspondent pas.'
+                })
+            
+            user = token_obj.user
+            user.set_password(password)
+            user.save()
+            
+            # Supprimer le token utilisé
+            token_obj.delete()
+            
+            return render(request, 'password_reset_success.html')
+        except EmailVerificationToken.DoesNotExist:
+            return render(request, 'password_reset_form.html', {
+                'error': 'Lien de réinitialisation invalide ou expiré.'
+            })
+    """Vue pour réinitialiser le mot de passe avec un token"""
+    permission_classes = []
+    
+    def get(self, request, token):
+        try:
+            token_obj = EmailVerificationToken.objects.get(token=token)
+            
+            if not token_obj.is_valid():
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
+                })
+            
+            return render(request, 'password_reset_form.html')
+        except EmailVerificationToken.DoesNotExist:
+            return render(request, 'password_reset_form.html', {
+                'error': 'Lien de réinitialisation invalide ou expiré.'
+            })
+    
+    def post(self, request, token):
+        try:
+            token_obj = EmailVerificationToken.objects.get(token=token)
+            
+            if not token_obj.is_valid():
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
+                })
+            
+            password = request.POST.get('password')
+            confirm_password = request.POST.get('confirm_password')
+            
+            if not password or not confirm_password:
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Les deux champs de mot de passe sont requis.'
+                })
+            
+            if password != confirm_password:
+                return render(request, 'password_reset_form.html', {
+                    'error': 'Les mots de passe ne correspondent pas.'
+                })
+            
+            user = token_obj.user
+            user.set_password(password)
+            user.save()
+            
+            # Supprimer le token utilisé
+            token_obj.delete()
+            
+            return render(request, 'password_reset_success.html')
+        except EmailVerificationToken.DoesNotExist:
+            return render(request, 'password_reset_form.html', {
+                'error': 'Lien de réinitialisation invalide ou expiré.'
+            })

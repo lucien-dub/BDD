@@ -33,9 +33,9 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Paramètres de sécurité recommandés
-SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SESSION_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+CSRF_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SECURE_SSL_REDIRECT = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
 # Application definition
 
@@ -108,12 +108,12 @@ AUTHENTICATION_BACKENDS = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = [
-    "https://campus-league.com",
-    "https://www.campus-league.com",
-    "http://campus-league.com",
-    "http://www.campus-league.com",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "https://campus-league.com",
+#     "https://www.campus-league.com",
+#     "http://campus-league.com",
+#     "http://www.campus-league.com",
+# ]
 from datetime import timedelta
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id', 
@@ -176,33 +176,33 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': '/home/ubuntu/BDD/merchex/logs/django.log',  # Remplacez par le chemin souhaité
-        },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-        'django.request': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
-    },
-}
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': '/home/ubuntu/BDD/merchex/logs/django.log',  # Remplacez par le chemin souhaité
+#         },
+#         'console': {
+#             'level': 'DEBUG',
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'django.request': {
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
 
 
 MEDIA_URL = '/media/'
@@ -236,12 +236,12 @@ EMAIL_HOST = 'ssl0.ovh.net'  # ex: smtp.gmail.com
 EMAIL_PORT = 587  # Port standard pour TLS
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'alexandre.montariol@campus-league.com'
-EMAIL_HOST_PASSWORD = 'MinesBetIndustrie12!'  # Utilisez des variables d'environnement en production
+EMAIL_HOST_PASSWORD = 'Patricia12_!'  # Utilisez des variables d'environnement en production
 DEFAULT_FROM_EMAIL = 'alexandre.montariol@campus-league.com'
 
 # Pour le développement, vous pouvez utiliser l'option de console pour voir les emails dans la console:
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Paramètres de l'application
-EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérificatio
+EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérification
 

@@ -356,7 +356,7 @@ class PointTransaction(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.transaction_type} - {self.points} points"    
-    
+
 class UserLoginTracker(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='login_tracker')
     daily_login_count = models.IntegerField(default=0)

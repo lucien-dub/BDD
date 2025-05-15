@@ -19,7 +19,7 @@ from listings.views import (
     VerifyBetsStatusView,
     PressViewSet,
     AcademieViewSet,
-    VerifyEmailView, ResendVerificationEmailView, LoginView
+    VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
 )
 
 from django.conf import settings
@@ -47,8 +47,9 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/verify-email/<str:token>/', VerifyEmailView.as_view(), name='verify-email'),
-    path('api/resend-verification-email/', ResendVerificationEmailView.as_view(), name='resend-verification-email'),
-    
+    path('api/forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+    path('api/reset-password/<str:token>/', ResetPasswordView.as_view(), name='reset-password'),
+
     # Routes API principales
     path('api/', include(router.urls)),  # Inclut toutes les routes du router
     
