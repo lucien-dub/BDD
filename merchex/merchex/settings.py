@@ -32,9 +32,9 @@ ALLOWED_HOSTS = ['213.32.91.54','vps-dde127df.vps.ovh.net','localhost','127.0.0.
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Paramètres de sécurité recommandés
-SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+# Paramètres de sécurité recommandés ces paramètres servent à forcer le passage en HTTPS --> pas possible si test en local
+SESSION_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli !!!!!!!!!
+CSRF_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 SECURE_SSL_REDIRECT = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
 # Application definition
@@ -71,11 +71,6 @@ CORS_ALLOW_CREDENTIALS = True
 
 SESSION_COOKIE_SAMESITE = 'None'  # Permet les requêtes cross-origin
 
-SESSION_COOKIE_SECURE = True      # Exige HTTPS
-
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000  # 1 an
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
