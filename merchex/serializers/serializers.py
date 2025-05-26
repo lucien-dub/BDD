@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
 from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
@@ -279,7 +279,6 @@ class VerifyUserSerializer(serializers.Serializer):
         User = get_user_model()
         
         try:
-            # Si vous identifiez les utilisateurs par email dans votre base de données
             if '@' in username:
                 user = User.objects.get(email=username)
             else:
@@ -317,34 +316,50 @@ class AcademieSerializer(serializers.ModelSerializer):
         read_only_fields = ['user']
 
 class UserRegistrationSerializer(UserSerializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True)
     accept_terms = serializers.BooleanField(required=True)
     
-    class Meta:
-        model = User
-        fields = ['username', 'email', 'password', 'confirm_password', 'accept_terms']
-        extra_kwargs = {
-            'password': {'write_only': True},
-            'email': {'required': True}
-        }
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Un compte avec cet email existe déjà.")
+        return value
+    
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Ce nom d'utilisateur est déjà pris.")
+        return value
+
     
     def validate(self, data):
-        if data['password'] != data.pop('confirm_password'):
-            raise serializers.ValidationError({'confirm_password': 'Les mots de passe ne correspondent pas'})
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({
+                'confirm_password': 'Les mots de passe ne correspondent pas'
+            })
         
         if not data['accept_terms']:
-            raise serializers.ValidationError({'accept_terms': 'Vous devez accepter les conditions générales d\'utilisation'})
+            raise serializers.ValidationError({
+                'accept_terms': 'Vous devez accepter les conditions générales d\'utilisation'
+            })
         
         return data
     
     def create(self, validated_data):
-        accept_terms = validated_data.pop('accept_terms', False)
+        accept_terms = validated_data.pop('accept_terms')
+        validated_data.pop('confirm_password')
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
         )
-        user.accept_terms = accept_terms
-        user.email_verified = False
-        user.save()
+        verification = Verification.objects.create(
+            user=user,
+            email_verified=False,
+            accept_terms=accept_terms
+        )
+        
+        EmailVerificationToken.objects.create(user=user)
+
         return user
