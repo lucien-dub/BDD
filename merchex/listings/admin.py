@@ -6,7 +6,6 @@ from listings.models import UserPoints
 from listings.models import Cote, Pari, photo_profil
 from listings.models import Verification, EmailVerificationToken
 
-admin.site.register(User)
 admin.site.register(Match)
 admin.site.register(UserPoints)
 admin.site.register(Cote)
