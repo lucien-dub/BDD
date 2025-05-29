@@ -15,10 +15,6 @@ from django.utils.html import strip_tags
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from rest_framework import status
-
-
-
 from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import MatchSerializer, CoteSerializer
@@ -29,7 +25,6 @@ from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilS
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil, Academie, Verification
 from listings.models import User, EmailVerificationToken, UserLoginTracker
-
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -49,9 +44,10 @@ import json
 
 from datetime import timedelta
 
+logger = logging.getLogger(__name__)
+
 def about(request):
     return HttpResponse('<h1>A propos</h1> <p>Nous adorons merch !</p>')
-
 
 """pour l'API"""
 class PariViewSet(viewsets.ModelViewSet):
@@ -64,8 +60,6 @@ class PariViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return Pari.objects.all()
-    
-logger = logging.getLogger(__name__)
 
 class BetViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -191,8 +185,6 @@ class MatchsAPIView(APIView):
         serializer = MatchSerializer(match, many=True)
         return Response(serializer.data)
 
-logger = logging.getLogger(__name__)
-
 class CotesAPIView(APIView):
     def get(self, request, *args, **kwargs):
         try:
@@ -244,8 +236,6 @@ class UsersPointsAPIView(APIView):
             {'username': up.user.username, 'total_points': up.total_points} 
             for up in users_points
         ], safe=False)
-
-logger = logging.getLogger(__name__)
 
 class UpdateCotesView(View):
     def get(self, request):
@@ -328,70 +318,56 @@ class VerifyBetsStatusView(APIView):
                 'error': 'Erreur lors de la vérification des paris',
                 'details': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
-        
-from rest_framework import generics, permissions, status
-from rest_framework.response import Response
-from django.db import transaction
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
-
+    
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
+        
         try:
+            # Le serializer s'occupe déjà de la validation d'accept_terms
             user = serializer.save()
-
-            # Vérifiez si 'accept_terms' est présent dans les données de la requête
-            accept_terms = request.data.get('accept_terms', False)
-            if accept_terms not in [True, False]:
-                return Response(
-                    {"error": "Le champ 'accept_terms' doit être un booléen."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
+            
+            # Récupérer accept_terms depuis les données validées du serializer
+            accept_terms = serializer.validated_data.get('accept_terms', False)
+            
             # Créer l'objet de vérification
             verification = Verification.objects.create(
                 user=user,
                 email_verified=False,
                 accept_terms=accept_terms
             )
-
+            
             # Envoyer l'email de vérification
-            send_verification_email(user)
-
-            return Response(
-                {"message": "Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte."},
-                status=status.HTTP_201_CREATED
-            )
-
-        except Verification.DoesNotExist:
-            return Response(
-                {"error": "Erreur lors de la création de l'objet de vérification."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+            try:
+                send_verification_email(user)
+                logger.info(f"Email de vérification envoyé pour l'utilisateur {user.username}")
+            except Exception as email_error:
+                logger.error(f"Échec de l'envoi d'email pour {user.username}: {str(email_error)}")
+                # On ne fait pas échouer l'inscription si l'email échoue
+                # L'utilisateur peut toujours demander un nouvel email plus tard
+                return Response({
+                    "message": "Compte créé avec succès, mais l'envoi de l'email de vérification a échoué. Vous pouvez demander un nouvel email de vérification.",
+                    "user_id": user.id,
+                    "email_sent": False
+                }, status=status.HTTP_201_CREATED)
+            
+            return Response({
+                "message": "Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.",
+                "user_id": user.id,
+                "email_sent": True
+            }, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
-            return Response(
-                {"error": f"Une erreur inattendue est survenue: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-# class RegisterView(APIView):
-#     permission_classes = (permissions.AllowAny,)
-
-#     def post(self, request):
-#         serializer = UserSerializer(data=request.data)
-#         if serializer.is_valid():
-#             user = serializer.save()
-#             return Response({
-#                 'user': UserSerializer(user).data,
-#                 'message': 'Inscription réussie!'
-#             }, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f"Erreur lors de la création du compte: {str(e)}")
+            # En cas d'erreur, la transaction sera automatiquement annulée
+            return Response({
+                "error": "Une erreur est survenue lors de la création du compte. Veuillez réessayer."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -494,7 +470,6 @@ class PhotoProfilViewSet(viewsets.ModelViewSet):
         # Créer la nouvelle photo
         serializer.save(user=self.request.user)
 
-
 class PressViewSet(viewsets.ModelViewSet):
     """
     API endpoint pour créer, lire, mettre à jour et supprimer des articles de presse
@@ -518,10 +493,6 @@ class PressViewSet(viewsets.ModelViewSet):
             
         return queryset
 
-from django.http import JsonResponse
-from rest_framework.response import Response
-
-
 class AcademieViewSet(viewsets.ModelViewSet):
     serializer_class = AcademieSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -544,7 +515,6 @@ class AcademieViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(serializer.data)
     
-
 class VerifyEmailView(APIView):
     def get(self, request, token):
         try:
@@ -571,6 +541,44 @@ class VerifyEmailView(APIView):
             return render(request, 'verification_expired.html', {
                 'error': 'Lien de vérification invalide ou expiré.'
             })
+
+def send_verification_email(user):
+    """Crée un token de vérification et envoie l'email"""
+    try:
+        # Supprimer les anciens tokens pour cet utilisateur
+        EmailVerificationToken.objects.filter(user=user).delete()
+        
+        # Créer un nouveau token
+        verification_token = EmailVerificationToken.objects.create(user=user)
+        
+        # Construire l'URL de vérification
+        verification_url = f"{settings.FRONTEND_URL}api/verify-email/{verification_token.token}/"
+        
+        # Préparer le contexte pour le template
+        context = {
+            'user': user,
+            'verification_url': verification_url,
+        }
+        
+        # Rendre le template HTML
+        html_message = render_to_string('email_verification.html', context)
+        
+        # Envoyer l'email
+        send_mail(
+            subject='Vérification de votre adresse email',
+            message='',  # Message texte vide car on utilise HTML
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False
+        )
+        
+        logger.info(f"Email de vérification envoyé avec succès à {user.email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi de l'email de vérification : {str(e)}")
+        raise e
         
 class ForgotPasswordView(APIView):
     """Vue pour demander un lien de réinitialisation de mot de passe"""

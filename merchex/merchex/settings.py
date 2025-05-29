@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -121,7 +122,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 #     "http://www.campus-league.com",
 # ]
 
-from datetime import timedelta
+FRONTEND_URL = 'https://campus-league.com/'
+
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id', 
     'USER_ID_CLAIM': 'user_id',

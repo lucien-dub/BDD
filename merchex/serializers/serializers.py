@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken
+from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
 from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
@@ -110,7 +110,6 @@ class BetCreateSerializer(serializers.ModelSerializer):
             logger.error(f"Erreur lors de la création du pari: {str(e)}")
             raise serializers.ValidationError(f"Erreur lors de la création du pari: {str(e)}")
 
-
 class MatchSerializer(ModelSerializer):
  
     class Meta:
@@ -122,7 +121,6 @@ class CoteSerializer(ModelSerializer):
     class Meta:
         model = Cote
         fields = ['match','cote1','cote2','coteN']
-
 
 class PhotoProfilSerializer(serializers.ModelSerializer):
     class Meta:
@@ -184,8 +182,6 @@ class BetSerializer(serializers.ModelSerializer):
         model = Bet
         fields = ['id','actif', 'date_creation','cote_totale','mise']
 
-    
-
 class PariListSerializer(serializers.ModelSerializer):
     match_info = serializers.SerializerMethodField()
     cote_selection = serializers.SerializerMethodField()
@@ -242,7 +238,6 @@ class PointTransactionSerializer(serializers.ModelSerializer):
         model = PointTransaction
         fields = ['points', 'transaction_type', 'reason', 'timestamp']
 
-
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -268,9 +263,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         return data
     
-
 class VerifyUserSerializer(serializers.Serializer):
-    username = serializers.CharField()  # <-- Modifié de email à username
+    username = serializers.CharField() 
     password = serializers.CharField()
     
     def validate(self, attrs):
@@ -279,7 +273,6 @@ class VerifyUserSerializer(serializers.Serializer):
         User = get_user_model()
         
         try:
-            # Si vous identifiez les utilisateurs par email dans votre base de données
             if '@' in username:
                 user = User.objects.get(email=username)
             else:
@@ -290,7 +283,6 @@ class VerifyUserSerializer(serializers.Serializer):
         if not user.check_password(password):
             raise serializers.ValidationError('Mot de passe incorrect.')
         return {'user': user}   
-
 
 class PressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -309,42 +301,62 @@ class PressSerializer(serializers.ModelSerializer):
         except Match.DoesNotExist:
             raise serializers.ValidationError("Le match spécifié n'existe pas")
         
-
 class AcademieSerializer(serializers.ModelSerializer):
     class Meta:
         model = Academie
         fields = ['id', 'user', 'academie']
         read_only_fields = ['user']
 
-class UserRegistrationSerializer(UserSerializer):
+class UserRegistrationSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True)
     accept_terms = serializers.BooleanField(required=True)
     
-    class Meta:
-        model = User
-        fields = ['username', 'email', 'password', 'confirm_password', 'accept_terms']
-        extra_kwargs = {
-            'password': {'write_only': True},
-            'email': {'required': True}
-        }
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Un compte avec cet email existe déjà.")
+        return value
+    
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Ce nom d'utilisateur est déjà pris.")
+        return value
     
     def validate(self, data):
-        if data['password'] != data.pop('confirm_password'):
-            raise serializers.ValidationError({'confirm_password': 'Les mots de passe ne correspondent pas'})
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError({
+                'confirm_password': 'Les mots de passe ne correspondent pas'
+            })
         
         if not data['accept_terms']:
-            raise serializers.ValidationError({'accept_terms': 'Vous devez accepter les conditions générales d\'utilisation'})
+            raise serializers.ValidationError({
+                'accept_terms': 'Vous devez accepter les conditions générales d\'utilisation'
+            })
         
         return data
     
     def create(self, validated_data):
-        accept_terms = validated_data.pop('accept_terms', False)
+        # Supprimer les champs qui ne font pas partie du modèle User
+        accept_terms = validated_data.pop('accept_terms')
+        validated_data.pop('confirm_password')
+        
+        # Créer l'utilisateur
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
         )
-        user.accept_terms = accept_terms
-        user.email_verified = False
-        user.save()
+        
+        # Créer l'enregistrement de vérification
+        verification = Verification.objects.create(
+            user=user,
+            email_verified=False,
+            accept_terms=accept_terms
+        )
+        
+        # Créer le token de vérification
+        EmailVerificationToken.objects.create(user=user)
+        
         return user
