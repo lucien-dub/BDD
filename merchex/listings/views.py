@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
+from django.utils.crypto import get_random_string
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
@@ -327,44 +328,36 @@ class RegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+    
         try:
-            # Le serializer s'occupe déjà de la validation d'accept_terms
             user = serializer.save()
-            
-            # Récupérer accept_terms depuis les données validées du serializer
             accept_terms = serializer.validated_data.get('accept_terms', False)
-            
-            # Créer l'objet de vérification
-            verification = Verification.objects.create(
-                user=user,
-                email_verified=False,
-                accept_terms=accept_terms
-            )
-            
+        
+            # Récupérer l'objet de vérification (créé par le signal)
+            verification = user.verification
+            verification.accept_terms = accept_terms
+            verification.save()
+        
             # Envoyer l'email de vérification
             try:
                 send_verification_email(user)
                 logger.info(f"Email de vérification envoyé pour l'utilisateur {user.username}")
             except Exception as email_error:
                 logger.error(f"Échec de l'envoi d'email pour {user.username}: {str(email_error)}")
-                # On ne fait pas échouer l'inscription si l'email échoue
-                # L'utilisateur peut toujours demander un nouvel email plus tard
                 return Response({
-                    "message": "Compte créé avec succès, mais l'envoi de l'email de vérification a échoué. Vous pouvez demander un nouvel email de vérification.",
+                    "message": "Compte créé avec succès, mais l'envoi de l'email de vérification a échoué.",
                     "user_id": user.id,
                     "email_sent": False
                 }, status=status.HTTP_201_CREATED)
-            
+        
             return Response({
                 "message": "Compte créé avec succès. Veuillez vérifier votre email pour activer votre compte.",
                 "user_id": user.id,
                 "email_sent": True
             }, status=status.HTTP_201_CREATED)
-            
+        
         except Exception as e:
             logger.error(f"Erreur lors de la création du compte: {str(e)}")
-            # En cas d'erreur, la transaction sera automatiquement annulée
             return Response({
                 "error": "Une erreur est survenue lors de la création du compte. Veuillez réessayer."
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
