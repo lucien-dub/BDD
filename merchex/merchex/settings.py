@@ -69,7 +69,7 @@ MIDDLEWARE = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-SESSION_COOKIE_SAMESITE = 'None'  # Permet les requêtes cross-origin
+#SESSION_COOKIE_SAMESITE = 'None'  # Permet les requêtes cross-origin
 
 SECURE_HSTS_SECONDS = 31536000  # 1 an
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
