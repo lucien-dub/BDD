@@ -65,6 +65,8 @@ urlpatterns = [
     # Route pour placer un pari
     path('api/bets/create/', CreateBetView.as_view(), name='create-bet'),
     path('api/verify-bets/', VerifyBetsStatusView.as_view(), name='verify-bets'),
+
+    path('api/user/statistics/', views.UserStatisticsAPIView.as_view(), name='user-statistics'),
 ]
 
 if settings.DEBUG:

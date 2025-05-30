@@ -45,6 +45,8 @@ import json
 
 from datetime import timedelta
 
+from .utils import send_verification_email, calculate_bet_statistics
+
 logger = logging.getLogger(__name__)
 
 def about(request):
@@ -83,17 +85,17 @@ class BetViewSet(viewsets.ViewSet):
                     paris_data.append({
                         'id': pari.id,
                         'match': {
-                            'equipe1': pari.match.equipe1,
-                            'equipe2': pari.match.equipe2,
-                            'score1': pari.match.score1,
-                            'score2': pari.match.score2,
-                            'date': pari.match.date,
-                            'heure': pari.match.heure,
-                            'sport': pari.match.sport,
-                            'niveau': pari.match.niveau
+                            'equipe1': pari.match.equipe1 if pari.match else None,
+                            'equipe2': pari.match.equipe2 if pari.match else None,
+                            'score1': pari.match.score1 if pari.match else None,
+                            'score2': pari.match.score2 if pari.match else None,
+                            'date': pari.match.date if pari.match else None,
+                            'heure': pari.match.heure if pari.match else None,
+                            'sport': pari.match.sport if pari.match else None,
+                            'niveau': pari.match.niveau if pari.match else None
                         },
                         'selection': pari.selection,
-                        'cote': str(pari.cote),
+                        'cote': str(pari.cote) if pari.cote else None,
                         'resultat': pari.resultat,
                         'actif': pari.actif
                     })
@@ -102,7 +104,7 @@ class BetViewSet(viewsets.ViewSet):
                     'id': bet.id,
                     'mise': bet.mise,
                     'cote_totale': bet.cote_totale,
-                    'gains_potentiels': round(float(bet.mise) * float(bet.cote_totale), 2),
+                    'gains_potentiels': round(float(bet.mise) * float(bet.cote_totale), 2) if bet.mise and bet.cote_totale else 0,
                     'date_creation': bet.date_creation,
                     'actif': bet.actif,
                     'paris': paris_data
@@ -534,45 +536,7 @@ class VerifyEmailView(APIView):
             return render(request, 'verification_expired.html', {
                 'error': 'Lien de vérification invalide ou expiré.'
             })
-
-def send_verification_email(user):
-    """Crée un token de vérification et envoie l'email"""
-    try:
-        # Supprimer les anciens tokens pour cet utilisateur
-        EmailVerificationToken.objects.filter(user=user).delete()
-        
-        # Créer un nouveau token
-        verification_token = EmailVerificationToken.objects.create(user=user)
-        
-        # Construire l'URL de vérification
-        verification_url = f"{settings.FRONTEND_URL}api/verify-email/{verification_token.token}/"
-        
-        # Préparer le contexte pour le template
-        context = {
-            'user': user,
-            'verification_url': verification_url,
-        }
-        
-        # Rendre le template HTML
-        html_message = render_to_string('email_verification.html', context)
-        
-        # Envoyer l'email
-        send_mail(
-            subject='Vérification de votre adresse email',
-            message='',  # Message texte vide car on utilise HTML
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False
-        )
-        
-        logger.info(f"Email de vérification envoyé avec succès à {user.email}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de l'envoi de l'email de vérification : {str(e)}")
-        raise e
-        
+      
 class ForgotPasswordView(APIView):
     """Vue pour demander un lien de réinitialisation de mot de passe"""
     permission_classes = []
@@ -812,3 +776,22 @@ class ResetPasswordView(APIView):
             return render(request, 'password_reset_form.html', {
                 'error': 'Lien de réinitialisation invalide ou expiré.'
             })
+        
+class UserStatisticsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            stats = calculate_bet_statistics(request.user)
+            return Response({
+                'success': True,
+                'statistics': stats
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du calcul des statistiques: {str(e)}")
+            return Response({
+                'success': False,
+                'error': 'Erreur lors du calcul des statistiques',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

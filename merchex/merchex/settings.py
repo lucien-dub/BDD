@@ -192,7 +192,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/home/ubuntu/BDD/merchex/logs/django.log',  # Remplacez par le chemin souhaité
+            'filename': '/home/ubuntu/BDD/merchex/logs/django.log', 
         },
         'console': {
             'level': 'DEBUG',
@@ -212,7 +212,6 @@ LOGGING = {
         },
     },
 }
-
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
