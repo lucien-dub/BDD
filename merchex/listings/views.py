@@ -30,7 +30,7 @@ from listings.models import User, EmailVerificationToken, UserLoginTracker
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.decorators import APIView, api_view
+from rest_framework.decorators import APIView, api_view, permission_classes
 from rest_framework.decorators import action
 from rest_framework import viewsets, permissions, status
 from rest_framework.permissions import IsAuthenticated
@@ -38,12 +38,15 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from django.utils import timezone
+from datetime import date, timedelta
+from django.contrib.auth.models import User
+from .models import UserLoginTracker, UserPoints, PointTransaction
+
 import logging
 from django.db.models import Q
 from django.core.paginator import Paginator
 import json
-
-from datetime import timedelta
 
 from .utils import send_verification_email, calculate_bet_statistics
 
@@ -795,3 +798,158 @@ class UserStatisticsAPIView(APIView):
                 'error': 'Erreur lors du calcul des statistiques',
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def daily_bonus_check(request):
+    """
+    Endpoint: GET /api/daily-bonus/
+    Vérifie si l'utilisateur peut réclamer le bonus quotidien
+    """
+    user = request.user
+    today = timezone.now().date()
+    
+    try:
+        # Récupérer ou créer le tracker de connexion de l'utilisateur
+        login_tracker, created = UserLoginTracker.objects.get_or_create(
+            user=user,
+            defaults={
+                'daily_login_count': 0,
+                'last_reset': today
+            }
+        )
+        
+        # Vérifier si c'est un nouveau jour
+        if login_tracker.last_reset != today:
+            # Nouveau jour = première connexion potentielle
+            is_first_login_today = True
+        else:
+            # Même jour = vérifier si déjà connecté
+            is_first_login_today = login_tracker.daily_login_count == 0
+    
+    except Exception as e:
+        return Response({
+            'error': 'Erreur lors de la vérification du bonus quotidien',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    return Response({
+        'is_first_login_today': is_first_login_today,
+        'date': today.isoformat(),
+        'user_id': user.id,
+        'current_login_count': login_tracker.daily_login_count if not is_first_login_today else 0
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def claim_daily_bonus(request):
+    """
+    Endpoint: POST /api/claim-daily-bonus/
+    Permet à l'utilisateur de réclamer son bonus quotidien
+    Cette fonction utilise la méthode increment_login_count() de UserLoginTracker
+    """
+    user = request.user
+    today = timezone.now().date()
+    
+    try:
+        # Récupérer ou créer le tracker de connexion
+        login_tracker, created = UserLoginTracker.objects.get_or_create(
+            user=user,
+            defaults={
+                'daily_login_count': 0,
+                'last_reset': today
+            }
+        )
+        
+        # Vérifier si c'est la première connexion du jour
+        is_first_login = False
+        if login_tracker.last_reset != today:
+            # Nouveau jour
+            is_first_login = True
+        elif login_tracker.daily_login_count == 0:
+            # Même jour mais première connexion
+            is_first_login = True
+        
+        if not is_first_login:
+            return Response({
+                'success': False,
+                'message': 'Bonus quotidien déjà réclamé aujourd\'hui',
+                'points_earned': 0,
+                'is_first_login_today': False
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Utiliser la méthode increment_login_count qui gère automatiquement
+        # l'ajout des points et la création de la transaction
+        login_tracker.increment_login_count()
+        
+        # Récupérer les points totaux actuels
+        user_points = UserPoints.get_or_create_points(user)
+        
+        return Response({
+            'success': True,
+            'message': 'Félicitations ! Vous avez gagné 10 points pour votre première connexion du jour !',
+            'points_earned': 10,
+            'total_points': user_points.total_points,
+            'login_date': today.isoformat(),
+            'daily_login_count': login_tracker.daily_login_count,
+            'is_first_login_today': True
+        })
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': 'Erreur lors de la réclamation du bonus',
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_points(request):
+    """
+    Endpoint: GET /api/user-points/
+    Récupère le total des points de l'utilisateur et ses informations de connexion
+    """
+    user = request.user
+    
+    try:
+        # Récupérer les points de l'utilisateur
+        user_points = UserPoints.get_or_create_points(user)
+        
+        # Récupérer les informations de connexion
+        login_tracker, created = UserLoginTracker.objects.get_or_create(
+            user=user,
+            defaults={
+                'daily_login_count': 0,
+                'last_reset': timezone.now().date()
+            }
+        )
+        
+        # Récupérer les dernières transactions de points (bonus quotidiens)
+        recent_transactions = PointTransaction.objects.filter(
+            user=user, 
+            reason="Première connexion de la journée"
+        ).order_by('-created_at')[:7]  # 7 dernières transactions
+        
+        return Response({
+            'user_id': user.id,
+            'username': user.username,
+            'total_points': user_points.total_points,
+            'daily_login_count': login_tracker.daily_login_count,
+            'last_reset': login_tracker.last_reset.isoformat(),
+            'recent_daily_bonuses': [
+                {
+                    'date': transaction.created_at.date().isoformat(),
+                    'points_earned': transaction.points,
+                    'reason': transaction.reason
+                } for transaction in recent_transactions
+            ]
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': 'Erreur lors de la récupération des points',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

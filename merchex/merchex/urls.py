@@ -67,6 +67,10 @@ urlpatterns = [
     path('api/verify-bets/', VerifyBetsStatusView.as_view(), name='verify-bets'),
 
     path('api/user/statistics/', views.UserStatisticsAPIView.as_view(), name='user-statistics'),
+
+    path('api/daily-bonus/', views.daily_bonus_check, name='daily_bonus_check'),
+    path('api/claim-daily-bonus/', views.claim_daily_bonus, name='claim_daily_bonus'),
+    path('api/user-points/', views.user_points, name='user_points'),
 ]
 
 if settings.DEBUG:
