@@ -823,6 +823,9 @@ def daily_bonus_check(request):
         # Vérifier si c'est un nouveau jour
         if login_tracker.last_reset != today:
             # Nouveau jour = première connexion potentielle
+            login_tracker.daily_login_count = 0  # ← Ajout de cette ligne
+            login_tracker.last_reset = today     # ← Ajout de cette ligne
+            login_tracker.save()  
             is_first_login_today = True
         else:
             # Même jour = vérifier si déjà connecté
