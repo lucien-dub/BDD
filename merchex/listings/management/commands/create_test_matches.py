@@ -1,6 +1,6 @@
 # listings/management/commands/create_test_matches.py
 from django.core.management.base import BaseCommand
-from django.db import models, transaction
+from django.db import transaction
 from listings.models import Match, Cote
 from datetime import datetime, timedelta
 import random
@@ -26,7 +26,8 @@ class Command(BaseCommand):
         villes = [
             'Lyon', 'Paris', 'Marseille', 'Toulouse', 'Bordeaux', 
             'Lille', 'Nantes', 'Strasbourg', 'Montpellier', 'Rennes',
-            'Nice', 'Saint-Étienne', 'Grenoble', 'Angers', 'Dijon'
+            'Nice', 'Saint-Étienne', 'Grenoble', 'Angers', 'Dijon',
+            'Clermont', 'Amiens', 'Besançon', 'Caen', 'Limoges'
         ]
         
         sports = ['Football', 'Basketball', 'Volleyball', 'Handball', 'Rugby', 'Tennis']
@@ -35,7 +36,8 @@ class Command(BaseCommand):
         # Académies existantes dans ton système
         academies = [
             'Lyon', 'Clermont', 'Grenoble', 'Saint Etienne', 'Aix/Marseille',
-            'Montpellier', 'Toulouse', 'Angers', 'Bordeaux', 'Reims'
+            'Montpellier', 'Toulouse', 'Angers', 'Bordeaux', 'Reims',
+            'Ile-de-France', 'Strasbourg'
         ]
         
         # Heures de match réalistes
@@ -44,24 +46,10 @@ class Command(BaseCommand):
         matches_created = 0
         cotes_created = 0
         
-        # Trouver un ID de départ sûr
-        try:
-            max_id = Match.objects.aggregate(max_id=models.Max('id'))['max_id']
-            start_id = (max_id + 100) if max_id else 100000  # Commencer à partir d'un ID éloigné
-            self.stdout.write(f'ID de départ: {start_id}')
-        except Exception as e:
-            start_id = 100000
-            self.stdout.write(f'Utilisation ID par défaut: {start_id}')
+        self.stdout.write(f'🚀 Création de {count} matchs fictifs...')
         
         for i in range(count):
             try:
-                current_id = start_id + i
-                
-                # Vérifier que l'ID n'existe pas déjà
-                if Match.objects.filter(id=current_id).exists():
-                    self.stdout.write(f'ID {current_id} existe déjà, passage au suivant')
-                    continue
-                
                 # Générer des données aléatoires mais réalistes
                 sport = random.choice(sports)
                 academie = random.choice(academies)
@@ -80,9 +68,8 @@ class Command(BaseCommand):
                 
                 # Utiliser une transaction pour créer match + cote ensemble
                 with transaction.atomic():
-                    # Créer le match
-                    match = Match(
-                        id=current_id,
+                    # Créer le match (SANS spécifier l'ID - Django se charge de l'auto-increment)
+                    match = Match.objects.create(
                         sport=sport,
                         date=date_match,
                         heure=heure_match,
@@ -100,28 +87,28 @@ class Command(BaseCommand):
                         commentaires="Match de test pour développement",
                         academie=academie
                     )
-                    match.save()
                     
-                    # Créer les cotes
+                    # Créer les cotes (maintenant match.id existe automatiquement)
                     cote1 = round(random.uniform(1.2, 4.0), 2)
                     coteN = round(random.uniform(2.5, 5.0), 2)
                     cote2 = round(random.uniform(1.2, 4.0), 2)
                     
-                    cote = Cote(
+                    cote = Cote.objects.create(
                         match=match,
                         cote1=cote1,
                         coteN=coteN,
                         cote2=cote2
                     )
-                    cote.save()
                     
                     matches_created += 1
                     cotes_created += 1
                     
-                    self.stdout.write(f'✅ Match {current_id} créé: {equipe1} vs {equipe2}')
+                    self.stdout.write(f'✅ Match {match.id} créé: {equipe1} vs {equipe2}')
                     
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"❌ Erreur match {i+1} (ID {current_id}): {str(e)}"))
+                self.stdout.write(self.style.ERROR(f"❌ Erreur création match {i+1}: {str(e)}"))
+                import traceback
+                self.stdout.write(traceback.format_exc())
                 continue
         
         self.stdout.write(self.style.SUCCESS(f'\n🎉 RÉSULTAT FINAL:'))
@@ -131,11 +118,18 @@ class Command(BaseCommand):
         # Afficher quelques exemples
         if matches_created > 0:
             self.stdout.write('\n📅 Exemples de matchs créés:')
-            exemples = Match.objects.filter(equipe1__startswith='TEST_').order_by('date')[:5]
+            exemples = Match.objects.filter(equipe1__startswith='TEST_').order_by('-id')[:5]
             for match in exemples:
                 try:
                     cote = Cote.objects.filter(match=match).first()
-                    cote_info = f" (Cotes: 1:{cote.cote1:.2f}, N:{cote.coteN:.2f}, 2:{cote.cote2:.2f})" if cote else ""
-                    self.stdout.write(f"  • {match.date} {match.heure} - {match.equipe1} vs {match.equipe2}{cote_info}")
+                    if cote:
+                        cote_info = f" (Cotes: 1:{cote.cote1:.2f}, N:{cote.coteN:.2f}, 2:{cote.cote2:.2f})"
+                    else:
+                        cote_info = " (Pas de cote)"
+                    self.stdout.write(f"  • ID:{match.id} - {match.date} {match.heure} - {match.equipe1} vs {match.equipe2}{cote_info}")
                 except Exception as e:
-                    self.stdout.write(f"  • {match.date} {match.heure} - {match.equipe1} vs {match.equipe2} (Erreur cote)")
+                    self.stdout.write(f"  • ID:{match.id} - {match.date} {match.heure} - {match.equipe1} vs {match.equipe2} (Erreur affichage)")
+        
+        # Statistiques finales
+        total_test_matches = Match.objects.filter(equipe1__startswith='TEST_').count()
+        self.stdout.write(f'\n📊 Total matchs de test dans la base: {total_test_matches}')
