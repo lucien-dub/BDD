@@ -50,25 +50,24 @@ class Command(BaseCommand):
         
         for i in range(count):
             try:
-                # Générer des données aléatoires mais réalistes
-                sport = random.choice(sports)
-                academie = random.choice(academies)
-                niveau = random.choice(niveaux)
-                
-                # Générer des noms d'équipes avec préfixe TEST_
-                ville1 = random.choice(villes)
-                ville2 = random.choice([v for v in villes if v != ville1])
-                
-                equipe1 = f"TEST_{ville1}_{sport}_{niveau}"
-                equipe2 = f"TEST_{ville2}_{sport}_{niveau}"
-                
-                # Date future aléatoire
-                date_match = datetime.now().date() + timedelta(days=random.randint(1, days_ahead))
-                heure_match = datetime.strptime(random.choice(heures_matches), '%H:%M').time()
-                
-                # Utiliser une transaction pour créer match + cote ensemble
                 with transaction.atomic():
-                    # Créer le match (SANS spécifier l'ID - Django se charge de l'auto-increment)
+                    # Générer des données aléatoires mais réalistes
+                    sport = random.choice(sports)
+                    academie = random.choice(academies)
+                    niveau = random.choice(niveaux)
+                    
+                    # Générer des noms d'équipes avec préfixe TEST_
+                    ville1 = random.choice(villes)
+                    ville2 = random.choice([v for v in villes if v != ville1])
+                    
+                    equipe1 = f"TEST_{ville1}_{sport}_{niveau}"
+                    equipe2 = f"TEST_{ville2}_{sport}_{niveau}"
+                    
+                    # Date future aléatoire
+                    date_match = datetime.now().date() + timedelta(days=random.randint(1, days_ahead))
+                    heure_match = datetime.strptime(random.choice(heures_matches), '%H:%M').time()
+                    
+                    # ÉTAPE 1: Créer et sauvegarder le match D'ABORD
                     match = Match.objects.create(
                         sport=sport,
                         date=date_match,
@@ -88,22 +87,25 @@ class Command(BaseCommand):
                         academie=academie
                     )
                     
-                    # Créer les cotes (maintenant match.id existe automatiquement)
+                    # Le match est maintenant sauvé en base avec un ID valide
+                    matches_created += 1
+                    self.stdout.write(f'✅ Match {match.id} créé: {equipe1} vs {equipe2}')
+                    
+                    # ÉTAPE 2: Maintenant créer la cote (le match existe en base)
                     cote1 = round(random.uniform(1.2, 4.0), 2)
                     coteN = round(random.uniform(2.5, 5.0), 2)
                     cote2 = round(random.uniform(1.2, 4.0), 2)
                     
+                    # Maintenant on peut créer la cote car match.id existe
                     cote = Cote.objects.create(
-                        match=match,
+                        match=match,  # match est maintenant sauvé avec un ID valide
                         cote1=cote1,
                         coteN=coteN,
                         cote2=cote2
                     )
                     
-                    matches_created += 1
                     cotes_created += 1
-                    
-                    self.stdout.write(f'✅ Match {match.id} créé: {equipe1} vs {equipe2}')
+                    self.stdout.write(f'  → Cote créée pour le match {match.id}')
                     
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"❌ Erreur création match {i+1}: {str(e)}"))
