@@ -249,10 +249,6 @@ class Command(BaseCommand):
         
         for academie, grp_id in ACADEMIES_GRPID.items():
             self.stdout.write(f'\nTraitement de l\'académie {academie}...')
-            
-            # AJOUTE CETTE LIGNE - Suppression des anciens matchs MAIS PAS les matchs de test
-            Match.objects.filter(academie=academie).exclude(equipe1__startswith='TEST_').delete()
-            self.stdout.write(f'Anciens matchs supprimés pour {academie} (matchs de test préservés)')
 
             url_resultats = f"{base_url_resultats}{grp_id}"
             url_planning = f"{base_url_planning}{grp_id}"
