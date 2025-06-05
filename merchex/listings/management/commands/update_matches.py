@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 from django.db.models import Max
 import os
+from django.core.management import call_command
 
 # Dictionnaire des académies et leurs GrpId
 ACADEMIES_GRPID = {
@@ -42,22 +43,6 @@ def extraire_niveau(texte):
 def extraire_poule(texte):
     match = re.search(r'(\w{2})(?= -)', texte)
     return match.group(1).strip() if match else ''
-
-def calculer_cote(match):
-    match_id = match.id if match.id else 0
-    return round(1 / (1.01 + match_id), 2)
-
-def creer_cotes_pour_match(match):
-    if match.id is None:
-        raise ValueError("Le match doit être sauvegardé avant de créer les cotes.")
-    
-    cote = Cote(
-        match=match,
-        coteN=2 + calculer_cote(match),
-        cote1=calculer_cote(match),
-        cote2=1 + calculer_cote(match)
-    )
-    cote.save()
 
 def export_excel_website(url: str, df_original, name_file: str, academie: str):
     try:
@@ -226,8 +211,7 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
         if matches_to_create:
             with transaction.atomic():
                 Match.objects.bulk_create(matches_to_create)
-                for match in matches_to_create:
-                    creer_cotes_pour_match(match)
+                call_command("cote_création")
             print(f"{len(matches_to_create)} nouveaux matchs créés pour {academie}")
         else:
             print(f"Aucun nouveau match à créer pour {academie}")
