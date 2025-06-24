@@ -47,7 +47,6 @@ class Equipe(models.Model):
     def __str__(self):
         return f"{self.academie} - {self.sport}"
 
-
 class Match(models.Model):
     id = models.IntegerField(primary_key=True)
     sport = models.CharField(max_length=50)
@@ -317,7 +316,6 @@ class Pari(models.Model):
     def __str__(self):
         return f"Pari {self.get_selection_display()} sur {self.match}"
 
-
 class UserPoints(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='user_points')
     total_points = models.IntegerField(default=0)
@@ -411,7 +409,6 @@ class photo_profil(models.Model):
         if self.photo:
             return f"{settings.MEDIA_URL}{self.photo}"
         return None
-    
 
 class Press(models.Model):
     match = models.ForeignKey('Match', on_delete=models.CASCADE, verbose_name="Match associé")
@@ -434,7 +431,6 @@ class Press(models.Model):
 class Academie(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     academie = models.CharField(max_length=100, default='')
-
 
 class Verification(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='verification')
@@ -477,3 +473,35 @@ class EmailVerificationToken(models.Model):
     
     def is_valid(self):
         return timezone.now() <= self.expires_at
+
+class Classement(models.Model):
+    sport = models.CharField(max_length=100)
+    niveau = models.CharField(max_length=50)
+    poule = models.CharField(max_length=10)
+    equipe = models.CharField(max_length=100)
+    place = models.IntegerField(default=0)
+    points = models.IntegerField(default=0)
+    joues = models.IntegerField(default=0)  # J
+    penalites = models.IntegerField(default=0)  # Pen
+    gagnes = models.IntegerField(default=0)  # G
+    nuls = models.IntegerField(default=0)  # N
+    perdus = models.IntegerField(default=0)  # P
+    gagnes_forfait = models.IntegerField(default=0)  # GF
+    perdus_forfait = models.IntegerField(default=0)  # PF
+    gagnes_tv = models.IntegerField(default=0)  # G TV
+    perdus_tv = models.IntegerField(default=0)  # P TV
+    buts_avantage = models.IntegerField(default=0)  # Ba
+    buts_desavantage = models.IntegerField(default=0)  # Bd
+    pour = models.IntegerField(default=0)
+    contre = models.IntegerField(default=0)
+    difference = models.IntegerField(default=0)  # Diff.
+    academie = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['sport', 'niveau', 'poule', 'equipe', 'academie']
+        ordering = ['sport', 'niveau', 'poule', 'place']
+
+    def __str__(self):
+        return f"{self.equipe} - {self.sport} {self.niveau} - Position {self.place}"
