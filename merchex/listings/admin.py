@@ -4,7 +4,7 @@ from background.actualisation_bdd import Match
 from django.contrib.auth.models import User
 from listings.models import UserPoints
 from listings.models import Cote, Pari, photo_profil
-from listings.models import Verification, EmailVerificationToken, UserLoginTracker
+from listings.models import Verification, EmailVerificationToken, UserLoginTracker, Classement
 
 admin.site.register(Match)
 admin.site.register(UserPoints)
@@ -14,5 +14,6 @@ admin.site.register(photo_profil)
 admin.site.register(Verification)
 admin.site.register(EmailVerificationToken)
 admin.site.register(UserLoginTracker)
-# Register your models here.
+admin.site.register(Classement)
+
 
