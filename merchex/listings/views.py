@@ -18,7 +18,7 @@ from django.urls import reverse
 
 from background.actualisation_bdd import Match
 from background.odds_calculator import calculer_cotes
-from serializers.serializers import MatchSerializer, CoteSerializer
+from serializers.serializers import ClassementSerializer, MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
 from serializers.serializers import PariCreateSerializer, BetCreateSerializer, PressSerializer
 from serializers.serializers import CustomTokenObtainPairSerializer, PariListSerializer,VerifyUserSerializer
@@ -41,7 +41,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from datetime import date, timedelta
 from django.contrib.auth.models import User
-from .models import UserLoginTracker, UserPoints, PointTransaction
+from .models import Classement, UserLoginTracker, UserPoints, PointTransaction
 
 import logging
 from django.db.models import Q
@@ -956,3 +956,230 @@ def user_points(request):
             'error': 'Erreur lors de la récupération des points',
             'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
+class ClassementView(APIView):
+    """
+    API View pour gérer les classements
+    """
+    
+    def get(self, request):
+        """
+        Récupère les classements avec possibilité de filtrage
+        Paramètres de query possibles :
+        - sport : filtrer par sport
+        - niveau : filtrer par niveau
+        - poule : filtrer par poule
+        - academie : filtrer par académie
+        - equipe : filtrer par équipe
+        """
+        try:
+            # Récupération des paramètres de filtrage
+            sport = request.query_params.get('sport', None)
+            niveau = request.query_params.get('niveau', None)
+            poule = request.query_params.get('poule', None)
+            academie = request.query_params.get('academie', None)
+            equipe = request.query_params.get('equipe', None)
+            
+            # Construction de la requête avec les filtres
+            queryset = Classement.objects.all()
+            
+            if sport:
+                queryset = queryset.filter(sport__icontains=sport)
+            if niveau:
+                queryset = queryset.filter(niveau__icontains=niveau)
+            if poule:
+                queryset = queryset.filter(poule__icontains=poule)
+            if academie:
+                queryset = queryset.filter(academie__icontains=academie)
+            if equipe:
+                queryset = queryset.filter(equipe__icontains=equipe)
+            
+            # Sérialisation des données
+            serializer = ClassementSerializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'data': serializer.data,
+                'count': queryset.count()
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """
+        Crée un nouveau classement
+        """
+        try:
+            serializer = ClassementSerializer(data=request.data)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    'success': True,
+                    'data': serializer.data,
+                    'message': 'Classement créé avec succès'
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def put(self, request):
+        """
+        Met à jour un classement existant
+        Nécessite l'ID du classement dans les données
+        """
+        try:
+            classement_id = request.data.get('id')
+            
+            if not classement_id:
+                return Response({
+                    'success': False,
+                    'error': 'ID du classement requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                classement = Classement.objects.get(id=classement_id)
+            except Classement.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Classement non trouvé'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = ClassementSerializer(classement, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    'success': True,
+                    'data': serializer.data,
+                    'message': 'Classement mis à jour avec succès'
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete(self, request):
+        """
+        Supprime un classement
+        Nécessite l'ID du classement en paramètre de query
+        """
+        try:
+            classement_id = request.query_params.get('id')
+            
+            if not classement_id:
+                return Response({
+                    'success': False,
+                    'error': 'ID du classement requis'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                classement = Classement.objects.get(id=classement_id)
+                classement.delete()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Classement supprimé avec succès'
+                }, status=status.HTTP_200_OK)
+                
+            except Classement.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Classement non trouvé'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class ClassementDetailView(APIView):
+    """
+    View pour des opérations spécifiques sur les classements
+    """
+    
+    def get(self, request, classement_id):
+        """
+        Récupère un classement spécifique par son ID
+        """
+        try:
+            classement = Classement.objects.get(id=classement_id)
+            serializer = ClassementSerializer(classement)
+            
+            return Response({
+                'success': True,
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Classement.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Classement non trouvé'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ClassementByPouleView(APIView):
+    """
+    View pour récupérer le classement d'une poule spécifique
+    """
+    
+    def get(self, request, sport, niveau, poule):
+        """
+        Récupère le classement complet d'une poule
+        """
+        try:
+            classements = Classement.objects.filter(
+                sport=sport,
+                niveau=niveau,
+                poule=poule
+            ).order_by('place')
+            
+            if not classements.exists():
+                return Response({
+                    'success': False,
+                    'error': 'Aucun classement trouvé pour cette poule'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = ClassementSerializer(classements, many=True)
+            
+            return Response({
+                'success': True,
+                'data': serializer.data,
+                'count': classements.count(),
+                'poule_info': {
+                    'sport': sport,
+                    'niveau': niveau,
+                    'poule': poule
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

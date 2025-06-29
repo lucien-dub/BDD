@@ -10,7 +10,7 @@ from datetime import datetime, date
 
 from creation_bdd.creation_bdd import Match
 
-from listings.models import UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
+from listings.models import Classement, UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
 from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
@@ -115,6 +115,18 @@ class MatchSerializer(ModelSerializer):
     class Meta:
         model = Match
         fields = ['id','sport', 'date', 'equipe1', 'equipe2', 'score1', 'score2', 'heure', 'niveau', 'match_joue', 'forfait_1','forfait_2','academie']
+
+class ClassementSerializer(ModelSerializer):
+
+    class Meta:
+        model = Classement
+        fields = ['sport','niveau','poule',
+                'equipe', 'place','points',
+                'joues','penalites','gagnes',
+                'nuls','perdus','gagnes_forfait',
+                'perdus_forfait','gagnes_tv', 'perdus_tv',
+                'buts_avantage','buts_desavantage','pour',
+                'contre','difference','academie']
 
 class CoteSerializer(ModelSerializer):
  

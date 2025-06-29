@@ -5,6 +5,8 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from listings import views
 from listings.views import (
+    ClassementByPouleView,
+    ClassementDetailView,
     RegisterView, 
     CustomTokenObtainPairView, 
     PariViewSet,
@@ -20,6 +22,7 @@ from listings.views import (
     PressViewSet,
     AcademieViewSet,
     VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
+    ClassementView,
 )
 
 from django.conf import settings
@@ -58,6 +61,9 @@ urlpatterns = [
     path('api/cotes/', CotesAPIView.as_view()),
     path('api/update-cotes/', UpdateCotesView.as_view(), name='update-cotes'),
     path('api/search-matches/', SearchMatchesAPIView.as_view(), name='search-matches'),
+    path('api/classements/', ClassementView.as_view(), name='classements'),
+    path('api/classements/<int:classement_id>/', ClassementDetailView.as_view(), name='classement-detail'),
+    path('api/classements/<str:sport>/<str:niveau>/<str:poule>/', ClassementByPouleView.as_view(), name='classement-poule'),
     
     # Routes pour les points utilisateurs
     path('api/points/', UsersPointsAPIView.as_view()),
