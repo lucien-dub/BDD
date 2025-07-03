@@ -211,7 +211,7 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
         if matches_to_create:
             with transaction.atomic():
                 Match.objects.bulk_create(matches_to_create)
-                call_command("cote_création")
+                call_command("cote_creation")
             print(f"{len(matches_to_create)} nouveaux matchs créés pour {academie}")
         else:
             print(f"Aucun nouveau match à créer pour {academie}")
