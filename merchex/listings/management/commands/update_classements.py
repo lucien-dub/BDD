@@ -39,80 +39,67 @@ def extraire_niveau(texte):
 
 
 def extraire_poule(texte):
-    """
-    Extrait les informations de la poule à partir du texte.
-    Retourne un dictionnaire avec les clés: 'sport_code', 'periode', 'niveau', 'poule'
+    """Extrait les informations de sport, niveau et poule depuis le titre."""
+    print(f"La chaine de la poule est : {texte}")
     
-    Formats supportés:
-    - BAD_BRASS_N1P1 - Badminton par équipes (Niveau 1 - MIXTE)
-    - BADMINTON_N1P1 - Badminton par équipes (Niveau 1 - MIXTE)
-    - RUG M BRAS N1 P1 - Rugby (Niveau 1 - M)
-    """
+    # Supprime les espaces en début et fin
+    texte = texte.strip()
     
-    # Pattern pour format avec underscores (BAD_BRASS_N1P1 ou BADMINTON_N1P1)
-    pattern_underscore = r'^([A-Z]+)(?:_BRASS|_BRASSAGE)?_N(\d+)P(\d+)'
-    match_underscore = re.search(pattern_underscore, texte)
+    # Pattern principal pour extraire toutes les informations
+    pattern_complet = r'^(\d+)\s*-\s*([A-Z\s]+)\s*\((.*?)\s*-\s*([MF]?)\s*\)\s*(?:.*?P(\d+))?'
+    match_complet = re.search(pattern_complet, texte, re.IGNORECASE)
     
-    if match_underscore:
-        sport_code = match_underscore.group(1)
-        niveau = match_underscore.group(2)
-        poule = match_underscore.group(3)
-        
-        # Détermine la période
-        if '_BRASS' in texte or '_BRASSAGE' in texte:
-            periode = 'brassage'
-        else:
-            periode = 'reguliere'
-        
-        return {
-            'sport_code': sport_code,
-            'niveau': niveau,
-            'poule': f"{periode}_P{poule}"
-        }
-    
-    # Pattern pour format avec espaces (RUG M BRAS N1 P1)
-    pattern_espace = r'^([A-Z]+)\s+([MF])?\s*(BRAS|BRASSAGE)?\s*N(\d+)\s+P(\d+)'
-    match_espace = re.search(pattern_espace, texte)
-    
-    if match_espace:
-        sport_code = match_espace.group(1)
-        genre = match_espace.group(2) if match_espace.group(2) else ''
-        periode_match = match_espace.group(3)
-        niveau = match_espace.group(4)
-        poule = match_espace.group(5)
-        
-        # Détermine la période
-        if periode_match and ('BRAS' in periode_match or 'BRASSAGE' in periode_match):
-            periode = 'brassage'
-        else:
-            periode = 'reguliere'
+    if match_complet:
+        sport_code = match_complet.group(1)
+        sport_name = match_complet.group(2).strip()
+        niveau = match_complet.group(3).strip()
+        genre = match_complet.group(4) if match_complet.group(4) else ''
+        poule = match_complet.group(5) if match_complet.group(5) else '1'
         
         # Construction du code sport complet avec genre si présent
         sport_code_complet = f"{sport_code}_{genre}" if genre else sport_code
         
-        return {
-            'sport_code': sport_code_complet,
-            'niveau': niveau,
-            'poule': f"{periode}_P{poule}"
-        }
+        # Retourner un tuple au lieu d'un dictionnaire
+        return (sport_code_complet, niveau, f"reguliere_P{poule}")
+    
+    # Pattern alternatif avec espaces
+    pattern_espace = r'^(\d+)\s*-\s*([A-Z\s]+)\s*\(\s*([^)]*?)\s*-\s*([MF]?)\s*\)\s*(?:.*?P(\d+))?'
+    match_espace = re.search(pattern_espace, texte, re.IGNORECASE)
+    
+    if match_espace:
+        sport_code = match_espace.group(1)
+        sport_name = match_espace.group(2).strip()
+        niveau_et_periode = match_espace.group(3).strip()
+        genre = match_espace.group(4) if match_espace.group(4) else ''
+        poule = match_espace.group(5) if match_espace.group(5) else '1'
+        
+        # Sépare niveau et période si présente
+        niveau = niveau_et_periode
+        periode = 'reguliere'
+        
+        if 'BRAS' in niveau_et_periode.upper():
+            periode = 'brassage'
+            # Retire BRASSAGE du niveau
+            niveau = re.sub(r'\s*BRAS.*', '', niveau_et_periode, flags=re.IGNORECASE).strip()
+        
+        # Construction du code sport complet avec genre si présent
+        sport_code_complet = f"{sport_code}_{genre}" if genre else sport_code
+        
+        # Retourner un tuple au lieu d'un dictionnaire
+        return (sport_code_complet, niveau, f"{periode}_P{poule}")
     
     # Pattern de fallback pour extraire au moins la poule si les autres échouent
     fallback_pattern = r'P(\d+)'
     fallback_match = re.search(fallback_pattern, texte)
     
     if fallback_match:
-        return {
-            'sport_code': 'INCONNU',
-            'niveau': '1',
-            'poule': fallback_match.group(1),
-        }
+        # Retourner un tuple au lieu d'un dictionnaire
+        return ('INCONNU', '1', fallback_match.group(1))
     
     # Si aucun pattern ne correspond
-    return {
-        'sport_code': 'INCONNU',
-        'niveau': '1',
-        'poule': '1',
-    }
+    # Retourner un tuple au lieu d'un dictionnaire
+    return ('INCONNU', '1', '1')
+
 
 def export_excel_classements_website(url: str, df_original, name_file: str, academie: str):
     try:
@@ -229,11 +216,7 @@ def import_classements_from_url(url_classements, academie, current_df_classement
 
                 # Créer une clé unique pour éviter les doublons
                 classement_key = (
-                    extraire_sport(str(row['Poule'])),
-                    extraire_niveau(str(row['Poule'])),
-                    extraire_poule(str(row['Poule'])),
-                    equipe,
-                    academie
+                    extraire_poule(poule_complete)
                 )
                 
                 if classement_key in seen_classements:
