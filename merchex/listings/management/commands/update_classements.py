@@ -1,8 +1,12 @@
-# update_classements.py
+# listings/management/commands/update_classements.py
 import os
 import re
-import pandas as pd
 import requests
+import pandas as pd
+from django.core.management.base import BaseCommand
+from django.db import transaction
+from django.db.models import Max
+from listings.models import Classement
 
 # Dictionnaire des académies et leurs GrpId
 ACADEMIES_GRPID = {
@@ -35,7 +39,7 @@ def extraire_niveau(texte):
 def extraire_poule(texte):
     """
     Extrait les informations de la poule à partir du texte.
-    Retourne un dictionnaire avec les clés: 'sport_code', 'periode', 'niveau', 'poule'
+    Retourne un dictionnaire avec les clés: 'sport_code', 'niveau', 'poule'
     
     Formats supportés:
     - BAD_BRASS_N1P1 - Badminton par équipes (Niveau 1 - MIXTE)
@@ -60,10 +64,8 @@ def extraire_poule(texte):
         
         return {
             'sport_code': sport_code,
-            'periode': periode,
             'niveau': niveau,
-            'poule': poule,
-            'poule_complete': f"{sport_code}_{periode}_N{niveau}P{poule}"
+            'poule': f"{periode}_{poule}",
         }
     
     # Pattern pour format avec espaces (RUG M BRAS N1 P1)
@@ -88,10 +90,8 @@ def extraire_poule(texte):
         
         return {
             'sport_code': sport_code_complet,
-            'periode': periode,
             'niveau': niveau,
-            'poule': poule,
-            'poule_complete': f"{sport_code_complet}_{periode}_N{niveau}P{poule}"
+            'poule': f"{periode}_{poule}"
         }
     
     # Pattern de fallback pour extraire au moins la poule si les autres échouent
@@ -110,10 +110,8 @@ def extraire_poule(texte):
     # Si aucun pattern ne correspond
     return {
         'sport_code': 'INCONNU',
-        'periode': 'reguliere',
         'niveau': '1',
-        'poule': '1',
-        'poule_complete': 'INCONNU_reguliere_N1P1'
+        'poule': '1_réguliere',
     }
 
 def export_excel_classements_website(url, df_original, filename, academie):
@@ -163,7 +161,7 @@ def export_excel_classements_website(url, df_original, filename, academie):
             
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
-            if df_original.equals(pd.DataFrame(df_new)):
+            if not df_original.empty and df_original.equals(pd.DataFrame(df_new)):
                 print(f"Les fichiers sont identiques pour {academie}.")
                 return df_original, False
             else:
@@ -194,10 +192,12 @@ def import_classements_from_url(url_classements, academie, current_df_classement
     classements_to_create = []
     classements_to_update = []
     seen_classements = set()
-    max_id = 0  # Vous devrez gérer l'ID différemment sans Django ORM
-    current_id = max_id + 1
     
     try:
+        # Obtenir l'ID maximum actuel
+        max_id = Classement.objects.aggregate(Max('id'))['id__max'] or 0
+        current_id = max_id + 1
+        
         # Conversion des colonnes numériques
         numeric_columns = ['Place', 'Pts', 'J', 'Pen', 'G', 'N', 'P', 'GF', 'PF', 
                           'G TV', 'P TV', 'Ba', 'Bd', 'Pour', 'Contre', 'Diff.']
@@ -210,7 +210,6 @@ def import_classements_from_url(url_classements, academie, current_df_classement
             try:
                 poule_complete = str(row['Poule']).strip()
                 equipe = str(row['Équipe']).strip() if pd.notna(row['Équipe']) else ''
-                print(f'La chaine de la poule est : {poule_complete}')
 
                 if not poule_complete or not equipe:
                     print(f"Données manquantes ligne {index} pour {academie}")
@@ -229,23 +228,29 @@ def import_classements_from_url(url_classements, academie, current_df_classement
                 classement_key = (
                     sport_final, 
                     niveau_final, 
-                    poule_info['poule_complete'],  # Utilisation de la poule complète avec période
+                    poule_info['poule_complete'],
                     equipe
                 )
-                
-                print(f"Sport: {sport_final}, Niveau: {niveau_final}, Poule: {poule_info['poule_complete']}, Période: {poule_info['periode']}")
 
                 if classement_key in seen_classements:
-                    print(f"Classement dupliqué ignoré: {classement_key}")
                     continue
                 
                 seen_classements.add(classement_key)
+
+                # Vérifier si le classement existe déjà
+                classement_existant = Classement.objects.filter(
+                    sport=sport_final,
+                    niveau=niveau_final,
+                    poule=poule_info['poule_complete'],
+                    equipe=equipe,
+                    academie=academie
+                ).first()
 
                 classement_data = {
                     'sport': sport_final,
                     'niveau': niveau_final,
                     'poule': poule_info['poule_complete'],
-                    'periode': poule_info['periode'],  # Ajout du champ période
+                    'periode': poule_info['periode'],
                     'equipe': equipe,
                     'place': int(row.get('Place', 0)),
                     'points': int(row.get('Pts', 0)),
@@ -266,18 +271,80 @@ def import_classements_from_url(url_classements, academie, current_df_classement
                     'academie': academie
                 }
 
-                # Ici vous devrez adapter selon votre méthode de stockage
-                # (base de données, fichier, etc.)
-                classements_to_create.append(classement_data)
-                current_id += 1
+                if classement_existant:
+                    # Mettre à jour le classement existant
+                    for key, value in classement_data.items():
+                        if key != 'id':
+                            setattr(classement_existant, key, value)
+                    classements_to_update.append(classement_existant)
+                else:
+                    # Créer un nouveau classement
+                    classement = Classement(
+                        id=current_id,
+                        **classement_data
+                    )
+                    classements_to_create.append(classement)
+                    current_id += 1
                 
             except Exception as e:
                 print(f"Erreur ligne {index} pour {academie}: {str(e)}")
                 continue
 
-        print(f"Traités {len(classements_to_create)} classements pour {academie}")
-        return df_classements
-        
+        # Sauvegarder les modifications
+        with transaction.atomic():
+            if classements_to_create:
+                Classement.objects.bulk_create(classements_to_create)
+                print(f"{len(classements_to_create)} nouveaux classements créés pour {academie}")
+                
+            if classements_to_update:
+                # Mise à jour par lot
+                for classement in classements_to_update:
+                    classement.save()
+                print(f"{len(classements_to_update)} classements mis à jour pour {academie}")
+                
+            if not classements_to_create and not classements_to_update:
+                print(f"Aucun classement à créer ou mettre à jour pour {academie}")
+                
     except Exception as e:
-        print(f"Erreur lors de l'import des classements pour {academie}: {str(e)}")
+        print(f"Erreur import classements pour {academie}: {str(e)}")
         return current_df_classements
+        
+    return df_classements
+
+class Command(BaseCommand):
+    help = 'Met à jour les classements depuis le site FFSU pour toutes les académies'
+
+    def handle(self, *args, **kwargs):
+        self.stdout.write('Début de la mise à jour des classements pour toutes les académies...')
+        
+        base_url_classements = 'https://sportco.abyss-clients.com/rencontres/classements/export?id=1&GrpId='
+        
+        # Créer le répertoire Excel s'il n'existe pas
+        if not os.path.exists(EXCEL_DIR):
+            os.makedirs(EXCEL_DIR)
+        
+        current_df = pd.DataFrame()
+        
+        for academie, grp_id in ACADEMIES_GRPID.items():
+            self.stdout.write(f'\nTraitement de l\'académie {academie}...')
+            
+            url_classements = f"{base_url_classements}{grp_id}"
+            
+            try:
+                current_df = import_classements_from_url(
+                    url_classements, 
+                    academie, 
+                    current_df
+                )
+                self.stdout.write(
+                    self.style.SUCCESS(f'Académie {academie} traitée avec succès')
+                )
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f'Erreur pour l\'académie {academie}: {str(e)}')
+                )
+                continue
+        
+        self.stdout.write(
+            self.style.SUCCESS('Mise à jour des classements terminée pour toutes les académies')
+        )
