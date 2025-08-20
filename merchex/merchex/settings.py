@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-41w*dyx86+2cb*lms16sg_8m0-z3=rn-3_#wsxf%b0mj_v_z+v'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['213.32.91.54','vps-dde127df.vps.ovh.net','localhost','127.0.0.1','campus-league.com','www.campus-league.com']
 
@@ -34,9 +34,9 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Paramètres de sécurité recommandés ces paramètres servent à forcer le passage en HTTPS --> pas possible si test en local
-SESSION_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli !!!!!!!!!
-CSRF_COOKIE_SECURE = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
-SECURE_SSL_REDIRECT = False #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli !!!!!!!!!
+CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
+SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
 # Application definition
 
