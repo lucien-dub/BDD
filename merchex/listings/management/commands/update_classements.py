@@ -1,13 +1,8 @@
 # update_classements.py
 import os
 import re
-import requests
 import pandas as pd
-from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.db.models import Max
-from django.core.management import call_command
-from listings.models import Classement
+import requests
 
 # Dictionnaire des académies et leurs GrpId
 ACADEMIES_GRPID = {
@@ -199,7 +194,7 @@ def import_classements_from_url(url_classements, academie, current_df_classement
     classements_to_create = []
     classements_to_update = []
     seen_classements = set()
-    max_id = Classement.objects.aggregate(Max('id'))['id__max'] or 0
+    max_id = 0  # Vous devrez gérer l'ID différemment sans Django ORM
     current_id = max_id + 1
     
     try:
@@ -245,15 +240,6 @@ def import_classements_from_url(url_classements, academie, current_df_classement
                     continue
                 
                 seen_classements.add(classement_key)
-                
-                # Recherche d'un classement existant
-                classement_existant = Classement.objects.filter(
-                    sport=sport_final,
-                    niveau=niveau_final,
-                    poule=poule_info['poule_complete'],
-                    equipe=equipe,
-                    academie=academie
-                ).first()
 
                 classement_data = {
                     'sport': sport_final,
@@ -280,42 +266,16 @@ def import_classements_from_url(url_classements, academie, current_df_classement
                     'academie': academie
                 }
 
-                if classement_existant:
-                    # Mettre à jour le classement existant
-                    for key, value in classement_data.items():
-                        if key != 'id':
-                            setattr(classement_existant, key, value)
-                    classements_to_update.append(classement_existant)
-                else:
-                    # Créer un nouveau classement
-                    classement = Classement(
-                        id=current_id,
-                        **classement_data
-                    )
-                    classements_to_create.append(classement)
-                    current_id += 1
+                # Ici vous devrez adapter selon votre méthode de stockage
+                # (base de données, fichier, etc.)
+                classements_to_create.append(classement_data)
+                current_id += 1
                 
             except Exception as e:
                 print(f"Erreur ligne {index} pour {academie}: {str(e)}")
                 continue
 
-        # Exécution des opérations de base de données
-        with transaction.atomic():
-            if classements_to_create:
-                Classement.objects.bulk_create(classements_to_create, batch_size=1000)
-                print(f"Créés {len(classements_to_create)} nouveaux classements pour {academie}")
-            
-            if classements_to_update:
-                Classement.objects.bulk_update(
-                    classements_to_update, 
-                    ['sport', 'niveau', 'poule', 'periode', 'equipe', 'place', 'points', 
-                     'joues', 'penalites', 'gagnes', 'nuls', 'perdus', 'gagnes_forfait', 
-                     'perdus_forfait', 'gagnes_tv', 'perdus_tv', 'buts_avantage', 
-                     'buts_desavantage', 'pour', 'contre', 'difference'],
-                    batch_size=1000
-                )
-                print(f"Mis à jour {len(classements_to_update)} classements pour {academie}")
-                
+        print(f"Traités {len(classements_to_create)} classements pour {academie}")
         return df_classements
         
     except Exception as e:
