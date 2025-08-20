@@ -1,4 +1,4 @@
-# listings/management/commands/update_classements.py
+# update_classements.py
 import os
 import re
 import requests
@@ -6,6 +6,7 @@ import pandas as pd
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Max
+from django.core.management import call_command
 from listings.models import Classement
 
 # Dictionnaire des académies et leurs GrpId
@@ -33,13 +34,14 @@ def extraire_sport(texte):
     return match.group(1).strip() if match else ''
 
 def extraire_niveau(texte):
-    match = re.search(r'\((.*?)\)', texte)
+    match = re.search(r'\(([^-]+?)\s*-', texte)
     return match.group(1).strip() if match else ''
+
 
 def extraire_poule(texte):
     """
     Extrait les informations de la poule à partir du texte.
-    Retourne un dictionnaire avec les clés: 'sport_code', 'niveau', 'poule'
+    Retourne un dictionnaire avec les clés: 'sport_code', 'periode', 'niveau', 'poule'
     
     Formats supportés:
     - BAD_BRASS_N1P1 - Badminton par équipes (Niveau 1 - MIXTE)
@@ -65,7 +67,7 @@ def extraire_poule(texte):
         return {
             'sport_code': sport_code,
             'niveau': niveau,
-            'poule': f"{periode}_{poule}",
+            'poule': f"{periode}_P{poule}"
         }
     
     # Pattern pour format avec espaces (RUG M BRAS N1 P1)
@@ -91,7 +93,7 @@ def extraire_poule(texte):
         return {
             'sport_code': sport_code_complet,
             'niveau': niveau,
-            'poule': f"{periode}_{poule}"
+            'poule': f"{periode}_P{poule}"
         }
     
     # Pattern de fallback pour extraire au moins la poule si les autres échouent
@@ -101,41 +103,56 @@ def extraire_poule(texte):
     if fallback_match:
         return {
             'sport_code': 'INCONNU',
-            'periode': 'reguliere',
             'niveau': '1',
             'poule': fallback_match.group(1),
-            'poule_complete': f"INCONNU_reguliere_N1P{fallback_match.group(1)}"
         }
     
     # Si aucun pattern ne correspond
     return {
         'sport_code': 'INCONNU',
         'niveau': '1',
-        'poule': '1_réguliere',
+        'poule': '1',
     }
 
-def export_excel_classements_website(url, df_original, filename, academie):
+def export_excel_classements_website(url: str, df_original, name_file: str, academie: str):
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = requests.get(url, headers=headers)
-        
+        response = requests.post(url)
         if response.status_code == 200:
-            file_path = os.path.join(EXCEL_DIR, filename)
+            file_name = f"{academie}_{name_file}"
+            file_path = os.path.join(EXCEL_DIR, file_name)
             
             with open(file_path, 'wb') as file:
                 file.write(response.content)
+            print(f"Fichier {file_name} téléchargé avec succès !")
             
-            df_new = pd.read_excel(file_path)
+            df_new = pd.read_excel(
+                file_path, 
+                engine='openpyxl',
+                dtype={
+                    'Poule': str,
+                    'Place': float,
+                    'Équipe': str,
+                    'Pts': float,
+                    'J': float,
+                    'Pen': float,
+                    'G': float,
+                    'N': float,
+                    'P': float,
+                    'GF': float,
+                    'PF': float,
+                    'G TV': float,
+                    'P TV': float,
+                    'Ba': float,
+                    'Bd': float,
+                    'Pour': float,
+                    'Contre': float,
+                    'Diff.': float
+                }
+            )
             
-            if df_new.empty:
-                print(f"Le fichier Excel téléchargé pour {academie} est vide.")
-                return df_original, False
-            
-            # Standardisation des colonnes par défaut si elles n'existent pas
-            default_columns = {
+            # Remplacer les valeurs NaN par des valeurs par défaut appropriées
+            df_new = df_new.fillna({
+                'Poule': '',
                 'Place': 0,
                 'Équipe': '',
                 'Pts': 0,
@@ -153,15 +170,11 @@ def export_excel_classements_website(url, df_original, filename, academie):
                 'Pour': 0,
                 'Contre': 0,
                 'Diff.': 0
-            }
-            
-            for col, default_val in default_columns.items():
-                if col not in df_new.columns:
-                    df_new[col] = default_val
+            })
             
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
             
-            if not df_original.empty and df_original.equals(pd.DataFrame(df_new)):
+            if df_original.equals(pd.DataFrame(df_new)):
                 print(f"Les fichiers sont identiques pour {academie}.")
                 return df_original, False
             else:
@@ -192,12 +205,10 @@ def import_classements_from_url(url_classements, academie, current_df_classement
     classements_to_create = []
     classements_to_update = []
     seen_classements = set()
+    max_id = Classement.objects.aggregate(Max('id'))['id__max'] or 0
+    current_id = max_id + 1
     
     try:
-        # Obtenir l'ID maximum actuel
-        max_id = Classement.objects.aggregate(Max('id'))['id__max'] or 0
-        current_id = max_id + 1
-        
         # Conversion des colonnes numériques
         numeric_columns = ['Place', 'Pts', 'J', 'Pen', 'G', 'N', 'P', 'GF', 'PF', 
                           'G TV', 'P TV', 'Ba', 'Bd', 'Pour', 'Contre', 'Diff.']
@@ -210,47 +221,42 @@ def import_classements_from_url(url_classements, academie, current_df_classement
             try:
                 poule_complete = str(row['Poule']).strip()
                 equipe = str(row['Équipe']).strip() if pd.notna(row['Équipe']) else ''
+                print(f'La chaine de la poule est : {poule_complete}')
 
                 if not poule_complete or not equipe:
                     print(f"Données manquantes ligne {index} pour {academie}")
                     continue
 
-                # Extraction des informations de poule avec la nouvelle fonction
-                poule_info = extraire_poule(poule_complete)
-                sport = extraire_sport(poule_complete)
-                niveau = extraire_niveau(poule_complete)
-                
-                # Utilisation des informations extraites
-                sport_final = sport if sport else poule_info['sport_code']
-                niveau_final = niveau if niveau else f"Niveau {poule_info['niveau']}"
-                
-                # Création de la clé de classement avec période
+                # Créer une clé unique pour éviter les doublons
                 classement_key = (
-                    sport_final, 
-                    niveau_final, 
-                    poule_info['poule_complete'],
-                    equipe
+                    extraire_sport(str(row['Poule'])),
+                    extraire_niveau(str(row['Poule'])),
+                    extraire_poule(str(row['Poule'])),
+                    equipe,
+                    academie
                 )
-
+                
                 if classement_key in seen_classements:
                     continue
-                
+                    
                 seen_classements.add(classement_key)
 
                 # Vérifier si le classement existe déjà
                 classement_existant = Classement.objects.filter(
-                    sport=sport_final,
-                    niveau=niveau_final,
-                    poule=poule_info['poule_complete'],
-                    equipe=equipe,
+                    sport=classement_key[0],
+                    niveau=classement_key[1],
+                    poule=classement_key[2],
+                    equipe=classement_key[3],
                     academie=academie
                 ).first()
+                
+                
+                print(f'Sport trouvé : {classement_key[0]}, Niveau trouvé {classement_key[1]}, Poule trouvée : {classement_key[2]}')
 
                 classement_data = {
-                    'sport': sport_final,
-                    'niveau': niveau_final,
-                    'poule': poule_info['poule_complete'],
-                    'periode': poule_info['periode'],
+                    'sport': classement_key[0],
+                    'niveau': classement_key[1],
+                    'poule': classement_key[2],
                     'equipe': equipe,
                     'place': int(row.get('Place', 0)),
                     'points': int(row.get('Pts', 0)),
@@ -319,32 +325,22 @@ class Command(BaseCommand):
         
         base_url_classements = 'https://sportco.abyss-clients.com/rencontres/classements/export?id=1&GrpId='
         
-        # Créer le répertoire Excel s'il n'existe pas
-        if not os.path.exists(EXCEL_DIR):
-            os.makedirs(EXCEL_DIR)
-        
-        current_df = pd.DataFrame()
-        
         for academie, grp_id in ACADEMIES_GRPID.items():
             self.stdout.write(f'\nTraitement de l\'académie {academie}...')
-            
+
             url_classements = f"{base_url_classements}{grp_id}"
             
+            current_df_classements = pd.DataFrame()
+            
             try:
-                current_df = import_classements_from_url(
+                current_df_classements = import_classements_from_url(
                     url_classements, 
-                    academie, 
-                    current_df
+                    academie,
+                    current_df_classements
                 )
-                self.stdout.write(
-                    self.style.SUCCESS(f'Académie {academie} traitée avec succès')
-                )
+                self.stdout.write(self.style.SUCCESS(f'Mise à jour terminée avec succès pour {academie} !'))
             except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f'Erreur pour l\'académie {academie}: {str(e)}')
-                )
+                self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour pour {academie} : {str(e)}'))
                 continue
         
-        self.stdout.write(
-            self.style.SUCCESS('Mise à jour des classements terminée pour toutes les académies')
-        )
+        self.stdout.write(self.style.SUCCESS('\nMise à jour terminée pour toutes les académies !'))
