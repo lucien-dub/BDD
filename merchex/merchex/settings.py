@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 from datetime import timedelta
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,20 +25,48 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-41w*dyx86+2cb*lms16sg_8m0-z3=rn-3_#wsxf%b0mj_v_z+v'
 
+<<<<<<< Updated upstream
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
+=======
+# Détection automatique de l'environnement
+IS_PRODUCTION = os.path.exists('/home/ubuntu')  # Détecte si on est sur le serveur Linux
+IS_LOCAL = sys.platform == 'win32'  # Détecte si on est sur Windows
+>>>>>>> Stashed changes
 
-ALLOWED_HOSTS = ['213.32.91.54','vps-dde127df.vps.ovh.net','localhost','127.0.0.1','campus-league.com','www.campus-league.com']
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = not IS_PRODUCTION
+
+# Hosts autorisés selon l'environnement
+if IS_PRODUCTION:
+    ALLOWED_HOSTS = ['213.32.91.54', 'vps-dde127df.vps.ovh.net', 'campus-league.com', 'www.campus-league.com']
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 # Paramètres pour fonctionner derrière un proxy
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+<<<<<<< Updated upstream
 # Paramètres de sécurité recommandés ces paramètres servent à forcer le passage en HTTPS --> pas possible si test en local
 SESSION_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli !!!!!!!!!
 CSRF_COOKIE_SECURE = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à True avant de sortir l'appli
 
+=======
+# Paramètres de sécurité selon l'environnement
+if IS_PRODUCTION:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    USE_X_FORWARDED_HOST = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+else:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+>>>>>>> Stashed changes
 # Application definition
 
 INSTALLED_APPS = [
@@ -49,12 +78,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'listings',
     'rest_framework',
-    'background_task',
+    'background_task', 
     'creation_bdd',
     'rest_framework_simplejwt',
     'corsheaders',
     'django_crontab',
     'django_extensions',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
@@ -64,6 +94,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'listings.middleware.AutoTokenRenewalMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  
 ]
@@ -113,7 +144,17 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS selon l'environnement
+if IS_PRODUCTION:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [
+        "https://campus-league.com",
+        "https://www.campus-league.com",
+        "http://campus-league.com",
+        "http://www.campus-league.com",
+    ]
+else:
+    CORS_ALLOW_ALL_ORIGINS = True 
 
 # CORS_ALLOWED_ORIGINS = [
 #     "https://campus-league.com",
@@ -127,7 +168,10 @@ FRONTEND_URL = 'https://campus-league.com/'
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id', 
     'USER_ID_CLAIM': 'user_id',
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),  # ← Changer de 1 à 30 jours
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=60),  # Ajout refresh token
+    'ROTATE_REFRESH_TOKENS': True,  # Rotation des refresh tokens
+    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist les anciens tokens
 }
 
 CRONJOBS = [
@@ -161,13 +205,23 @@ WSGI_APPLICATION = 'merchex.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Base de données selon l'environnement
+if IS_PRODUCTION:
+    # PRODUCTION : Garder votre configuration SQLite existante qui fonctionne
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',  # Votre DB de production actuelle
+        }
     }
-}
-
+else:
+    # LOCAL : Base de données séparée pour les tests en développement
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db_local_test.sqlite3',  # DB séparée pour éviter les conflits
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -187,33 +241,64 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': '/home/ubuntu/BDD/merchex/logs/django.log', 
+# Configuration des logs selon l'environnement
+if IS_PRODUCTION:
+    # Configuration logs production
+    LOGS_DIR = Path('/home/ubuntu/BDD/merchex/logs')
+    LOGS_DIR.mkdir(exist_ok=True)
+    
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'file': {
+                'level': 'INFO',
+                'class': 'logging.handlers.RotatingFileHandler',
+                'filename': LOGS_DIR / 'django.log',
+                'maxBytes': 1024*1024*5,
+                'backupCount': 5,
+            },
+            'console': {
+                'level': 'ERROR',  # Moins verbeux en production
+                'class': 'logging.StreamHandler',
+            },
         },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
+        'loggers': {
+            'django': {
+                'handlers': ['file', 'console'],
+                'level': 'INFO',
+                'propagate': False,
+            },
         },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
+    }
+else:
+    # Configuration logs locale (plus simple)
+    LOGS_DIR = BASE_DIR / 'logs'
+    LOGS_DIR.mkdir(exist_ok=True)
+    
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.StreamHandler',
+            },
+            'file': {
+                'level': 'DEBUG',
+                'class': 'logging.FileHandler',
+                'filename': LOGS_DIR / 'django_local.log',
+            },
         },
-        'django.request': {
-            'handlers': ['file', 'console'],
-            'level': 'DEBUG',
-            'propagate': True,
+        'loggers': {
+            'django': {
+                'handlers': ['console', 'file'],
+                'level': 'DEBUG',
+                'propagate': False,
+            },
         },
-    },
-}
+    }
+
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -222,13 +307,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/

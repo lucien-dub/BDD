@@ -37,16 +37,22 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 
 from django.utils import timezone
 from datetime import date, timedelta
 from django.contrib.auth.models import User
 from .models import Classement, UserLoginTracker, UserPoints, PointTransaction
 
+from django.conf import settings
+
 import logging
 from django.db.models import Q
 from django.core.paginator import Paginator
 import json
+import jwt
 
 from .utils import send_verification_email, calculate_bet_statistics
 
@@ -398,6 +404,152 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 {'detail': 'Identifiants invalides'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Vue personnalisée pour le rafraîchissement des tokens"""
+    
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200:
+            # Optionnel : logger le renouvellement
+            logger.info(f"Token renouvelé pour l'utilisateur")
+            
+        return response
+
+class TokenVerifyView(APIView):
+    """Vérifie la validité d'un token JWT"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            # Si on arrive ici, c'est que le token est valide (grâce au middleware JWT)
+            user = request.user
+            
+            # Optionnel : calculer le temps restant avant expiration
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+                try:
+                    # Décoder le token pour obtenir l'expiration
+                    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'], options={"verify_signature": False})
+                    exp_timestamp = payload.get('exp')
+                    current_timestamp = timezone.now().timestamp()
+                    time_until_expiry = exp_timestamp - current_timestamp
+                    
+                    return Response({
+                        'valid': True,
+                        'user_id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'expires_in': max(0, int(time_until_expiry))  # secondes jusqu'à expiration
+                    }, status=status.HTTP_200_OK)
+                except jwt.DecodeError:
+                    pass
+            
+            return Response({
+                'valid': True,
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'valid': False,
+                'error': str(e)
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+class TokenRenewView(APIView):
+    """Renouvelle un token existant avec une nouvelle durée"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            user = request.user
+            
+            # Créer un nouveau token avec la durée configurée dans les settings
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'message': 'Token renouvelé avec succès'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'error': 'Erreur lors du renouvellement du token',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class LogoutView(APIView):
+    """Déconnexion avec blacklist du refresh token"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            refresh_token = request.data.get("refresh")
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+                
+            return Response({
+                'message': 'Déconnexion réussie'
+            }, status=status.HTTP_200_OK)
+            
+        except TokenError:
+            return Response({
+                'error': 'Token invalide'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'error': 'Erreur lors de la déconnexion',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class CheckTokenExpirationView(APIView):
+    """Vérifie si le token expire bientôt et retourne les infos de renouvellement"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            
+            if not auth_header.startswith('Bearer '):
+                return Response({
+                    'error': 'Format d\'autorisation invalide'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            token = auth_header[7:]
+            
+            # Décoder le token pour obtenir l'expiration
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'], options={"verify_signature": False})
+            exp_timestamp = payload.get('exp')
+            current_timestamp = timezone.now().timestamp()
+            time_until_expiry = exp_timestamp - current_timestamp
+            
+            # Définir le seuil de renouvellement (ex: 7 jours = 604800 secondes)
+            renewal_threshold = 7 * 24 * 60 * 60  # 7 jours en secondes
+            should_renew = time_until_expiry < renewal_threshold
+            
+            return Response({
+                'expires_in': max(0, int(time_until_expiry)),
+                'expires_at': exp_timestamp,
+                'should_renew': should_renew,
+                'renewal_threshold': renewal_threshold,
+                'days_until_expiry': max(0, time_until_expiry / 86400)  # en jours
+            }, status=status.HTTP_200_OK)
+            
+        except jwt.DecodeError:
+            return Response({
+                'error': 'Token invalide'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'error': 'Erreur lors de la vérification',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SearchMatchesAPIView(APIView):
     permission_classes = (permissions.AllowAny,)
