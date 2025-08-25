@@ -23,11 +23,6 @@ from listings.views import (
     AcademieViewSet,
     VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
     ClassementView,
-    CustomTokenRefreshView, 
-    TokenVerifyView, 
-    TokenRenewView, 
-    LogoutView,
-    CheckTokenExpirationView,
 )
 
 from django.conf import settings
@@ -82,14 +77,6 @@ urlpatterns = [
     path('api/daily-bonus/', views.daily_bonus_check, name='daily_bonus_check'),
     path('api/claim-daily-bonus/', views.claim_daily_bonus, name='claim_daily_bonus'),
     path('api/user-points/', views.user_points, name='user_points'),
-
-    # Authentification JWT
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
-    path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-    path('api/token/renew/', TokenRenewView.as_view(), name='token_renew'),
-    path('api/token/check-expiration/', CheckTokenExpirationView.as_view(), name='token_check_expiration'),
-    path('api/logout/', LogoutView.as_view(), name='logout'),
 ]
 
 if settings.DEBUG:
