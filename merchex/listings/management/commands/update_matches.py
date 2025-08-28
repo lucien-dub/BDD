@@ -173,6 +173,11 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
                 ).exclude(equipe1__startswith='TEST_').first()
 
                 if match_existant:
+                    match_existant.match_joue = row.get('M. Joué', False)
+                    match_existant.score1 = row.get('Score 1', '')
+                    match_existant.score2 = row.get('Score 2', '')
+                    match_existant.forfait_1 = row.get('Forf. 1', False)
+                    match_existant.forfait_2 = row.get('Forf. 2', False)
                     match_existant.lieu = lieu
                     match_existant.arbitre = row.get('Arbitre(s)', '')
                     match_existant.commentaires = row.get('Commentaires', '')
@@ -211,7 +216,6 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
         if matches_to_create:
             with transaction.atomic():
                 Match.objects.bulk_create(matches_to_create)
-                call_command("cote_creation")
             print(f"{len(matches_to_create)} nouveaux matchs créés pour {academie}")
         else:
             print(f"Aucun nouveau match à créer pour {academie}")
@@ -219,7 +223,7 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
     except Exception as e:
         print(f"Erreur import pour {academie}: {str(e)}")
         return current_df_resultats, current_df_planning
-        
+    
     return df_resultats, df_planning
 
 class Command(BaseCommand):
@@ -252,5 +256,6 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'Erreur lors de la mise à jour pour {academie} : {str(e)}'))
                 continue
-        
+
+        call_command("cote_creation")
         self.stdout.write(self.style.SUCCESS('\nMise à jour terminée pour toutes les académies !'))
