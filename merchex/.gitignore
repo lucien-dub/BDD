@@ -1,0 +1,18 @@
+# Fichiers de Base de Données
+*.sqlite3
+db.sqlite3.backup*
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+
+# Fichiers de logs
+logs/
+
+# Environnement virtuel (très important de l'ignorer)
+venv-serveur/
+
+# Fichiers sensibles (ne jamais les versionner)
+*.key
+*.pem
+*.crt
