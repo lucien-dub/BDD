@@ -1,0 +1,26 @@
+# Base de données SQLite
+*.sqlite3
+*.db
+db.sqlite3
+merchex/db.sqlite3
+
+# Fichiers Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+
+# Variables d'environnement
+.env
+.env.local
+
+# Fichiers de développement
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Fichiers Django
+media/
+staticfiles/
