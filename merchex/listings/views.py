@@ -1253,4 +1253,4 @@ def check_first_login(request):
         logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
         return Response(
             {'error': 'Erreur interne du serveur'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
