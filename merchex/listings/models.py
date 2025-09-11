@@ -362,8 +362,8 @@ class UserLoginTracker(models.Model):
     daily_login_count = models.IntegerField(default=0)
     total_login_count = models.IntegerField(default=0)  # ← Ajouter ce champ si manquant
     last_reset = models.DateField(default=timezone.now)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, default='2025-09-11 22:20:00')
+    updated_at = models.DateTimeField(auto_now=True, default='2025-09-11 22:20:00')
 
     def increment_login_count(self):
         """Incrémente les compteurs et ajoute des points pour la première connexion quotidienne"""
