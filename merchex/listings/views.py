@@ -799,7 +799,6 @@ class UserStatisticsAPIView(APIView):
                 'details': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def daily_bonus_check(request):
@@ -1183,3 +1182,75 @@ class ClassementByPouleView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_first_login(request):
+    """
+    Endpoint: GET /api/check-first-login/
+    Vérifie si c'est la première connexion de l'utilisateur au serveur
+    et retourne de nouveaux tokens pour la sécurité
+    """
+    try:
+        user = request.user
+        today = timezone.now().date()
+        
+        # Récupérer ou créer le tracking utilisateur
+        login_tracker, created = UserLoginTracker.objects.get_or_create(
+            user=user,
+            defaults={
+                'daily_login_count': 0,
+                'last_reset': today
+            }
+        )
+        
+        # Déterminer si c'est la première connexion globale
+        is_first_login = created or login_tracker.total_login_count <= 1
+        
+        # Vérifier si c'est la première connexion du jour
+        is_first_daily_login = False
+        if login_tracker.last_reset != today:
+            is_first_daily_login = True
+            login_tracker.last_reset = today
+            login_tracker.daily_login_count = 0
+            login_tracker.save()
+        elif login_tracker.daily_login_count == 0:
+            is_first_daily_login = True
+        
+        # Générer de nouveaux tokens pour la sécurité
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+        
+        # Si c'est la première connexion, ne pas incrémenter tout de suite
+        # (ce sera fait lors de la réclamation du bonus)
+        
+        response_data = {
+            'is_first_login': is_first_login,
+            'is_first_daily_login': is_first_daily_login,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            },
+            'login_stats': {
+                'total_logins': getattr(login_tracker, 'total_login_count', 1),
+                'daily_logins': login_tracker.daily_login_count,
+                'last_login_date': login_tracker.last_reset.isoformat() if login_tracker.last_reset else today.isoformat()
+            }
+        }
+        
+        logger.info(f"Vérification première connexion pour {user.username}: "
+                   f"première_globale={is_first_login}, "
+                   f"première_quotidienne={is_first_daily_login}")
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
+        return Response(
+            {'error': 'Erreur interne du serveur'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR

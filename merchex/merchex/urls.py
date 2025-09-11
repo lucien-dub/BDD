@@ -77,6 +77,8 @@ urlpatterns = [
     path('api/daily-bonus/', views.daily_bonus_check, name='daily_bonus_check'),
     path('api/claim-daily-bonus/', views.claim_daily_bonus, name='claim_daily_bonus'),
     path('api/user-points/', views.user_points, name='user_points'),
+
+    path('api/check-first-login/', views.check_first_login, name='check_first_login'),
 ]
 
 if settings.DEBUG:

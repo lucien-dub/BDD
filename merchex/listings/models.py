@@ -360,33 +360,46 @@ class PointTransaction(models.Model):
 class UserLoginTracker(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='login_tracker')
     daily_login_count = models.IntegerField(default=0)
+    total_login_count = models.IntegerField(default=0)  # ← Ajouter ce champ si manquant
     last_reset = models.DateField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def increment_login_count(self):
-        # Si c'est un nouveau jour, réinitialiser le compteur
+        """Incrémente les compteurs et ajoute des points pour la première connexion quotidienne"""
         today = timezone.now().date()
+        
+        # Vérifier si c'est un nouveau jour
         if self.last_reset != today:
-            self.daily_login_count = 0
             self.last_reset = today
-
-        # Si c'est la première connexion de la journée
+            self.daily_login_count = 0
+        
+        # Si c'est la première connexion du jour, ajouter des points
         if self.daily_login_count == 0:
-            # Chercher les points de l'utilisateur
+            from .models import UserPoints, PointTransaction
+            
+            # Récupérer ou créer UserPoints
             user_points = UserPoints.get_or_create_points(self.user)
+            
             # Ajouter 10 points
             user_points.total_points += 10
             user_points.save()
             
-            # Créer une transaction pour tracer les points gagnés
+            # Créer une transaction
             PointTransaction.objects.create(
                 user=self.user,
                 points=10,
                 transaction_type=PointTransaction.EARN,
                 reason="Première connexion de la journée"
             )
-
+        
+        # Incrémenter les compteurs
         self.daily_login_count += 1
+        self.total_login_count += 1  # ← Utiliser ce champ
         self.save()
+
+    def __str__(self):
+        return f"Login tracking for {self.user.username}"
 
 @receiver(post_save, sender=User)
 def create_user_login_tracker(sender, instance, created, **kwargs):
