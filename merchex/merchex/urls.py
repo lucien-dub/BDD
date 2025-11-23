@@ -7,13 +7,13 @@ from listings import views
 from listings.views import (
     ClassementByPouleView,
     ClassementDetailView,
-    RegisterView, 
-    CustomTokenObtainPairView, 
+    RegisterView,
+    CustomTokenObtainPairView,
     PariViewSet,
-    MatchsAPIView, 
+    MatchsAPIView,
     CotesAPIView,
-    UserViewSet, 
-    UsersPointsAPIView, 
+    UserViewSet,
+    UsersPointsAPIView,
     UpdateCotesView,
     SearchMatchesAPIView,
     CreateBetView,
@@ -23,6 +23,7 @@ from listings.views import (
     AcademieViewSet,
     VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
     ClassementView,
+    NotificationViewSet,
 )
 
 from django.conf import settings
@@ -37,6 +38,7 @@ router.register(r'bets', BetViewSet, basename='bets')
 router.register(r'photos', views.PhotoProfilViewSet, basename='photo-profil')
 router.register(r'press', PressViewSet)
 router.register(r'academies', AcademieViewSet, basename='academie')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     # Routes d'administration

@@ -23,9 +23,10 @@ from serializers.serializers import UserSerializer, UserPointsSerializer, PointT
 from serializers.serializers import PariCreateSerializer, BetCreateSerializer, PressSerializer
 from serializers.serializers import CustomTokenObtainPairSerializer, PariListSerializer,VerifyUserSerializer
 from serializers.serializers import  PariSerializer, BetSerializer, PhotoProfilSerializer, AcademieSerializer, UserRegistrationSerializer
+from serializers.serializers import NotificationSerializer
 from listings.models import UserPoints, PointTransaction, Cote, Pari, Bet, Press
 from listings.models import photo_profil, Academie, Verification
-from listings.models import User, EmailVerificationToken, UserLoginTracker
+from listings.models import User, EmailVerificationToken, UserLoginTracker, Notification
 
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -1252,5 +1253,175 @@ def check_first_login(request):
     except Exception as e:
         logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
         return Response(
-            {'error': 'Erreur interne du serveur'}, 
+            {'error': 'Erreur interne du serveur'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============ VUES POUR LES NOTIFICATIONS ============
+
+class NotificationViewSet(viewsets.ViewSet):
+    """ViewSet pour gérer les notifications utilisateur"""
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        """Liste toutes les notifications de l'utilisateur"""
+        try:
+            # Filtrer les notifications par utilisateur
+            notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+
+            # Pagination optionnelle
+            page_size = request.query_params.get('page_size', 20)
+            paginator = Paginator(notifications, page_size)
+            page_number = request.query_params.get('page', 1)
+            page_obj = paginator.get_page(page_number)
+
+            serializer = NotificationSerializer(page_obj, many=True)
+
+            return Response({
+                'notifications': serializer.data,
+                'total_count': paginator.count,
+                'page_count': paginator.num_pages,
+                'current_page': page_obj.number,
+                'unread_count': notifications.filter(est_lue=False).count()
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération des notifications: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la récupération des notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'])
+    def unread(self, request):
+        """Liste uniquement les notifications non lues"""
+        try:
+            notifications = Notification.objects.filter(
+                user=request.user,
+                est_lue=False
+            ).order_by('-created_at')
+
+            serializer = NotificationSerializer(notifications, many=True)
+
+            return Response({
+                'notifications': serializer.data,
+                'count': notifications.count()
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération des notifications non lues: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la récupération des notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'])
+    def count_unread(self, request):
+        """Compte le nombre de notifications non lues"""
+        try:
+            count = Notification.objects.filter(
+                user=request.user,
+                est_lue=False
+            ).count()
+
+            return Response({
+                'unread_count': count
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors du comptage des notifications: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors du comptage des notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['patch'])
+    def mark_as_read(self, request, pk=None):
+        """Marque une notification comme lue"""
+        try:
+            notification = get_object_or_404(
+                Notification,
+                pk=pk,
+                user=request.user
+            )
+
+            notification.est_lue = True
+            notification.save()
+
+            serializer = NotificationSerializer(notification)
+
+            return Response({
+                'message': 'Notification marquée comme lue',
+                'notification': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la mise à jour de la notification: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la mise à jour de la notification'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        """Marque toutes les notifications de l'utilisateur comme lues"""
+        try:
+            updated_count = Notification.objects.filter(
+                user=request.user,
+                est_lue=False
+            ).update(est_lue=True)
+
+            return Response({
+                'message': f'{updated_count} notification(s) marquée(s) comme lue(s)',
+                'count': updated_count
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la mise à jour des notifications: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la mise à jour des notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def destroy(self, request, pk=None):
+        """Supprime une notification"""
+        try:
+            notification = get_object_or_404(
+                Notification,
+                pk=pk,
+                user=request.user
+            )
+
+            notification.delete()
+
+            return Response({
+                'message': 'Notification supprimée avec succès'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression de la notification: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la suppression de la notification'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['delete'])
+    def clear_all(self, request):
+        """Supprime toutes les notifications lues de l'utilisateur"""
+        try:
+            deleted_count, _ = Notification.objects.filter(
+                user=request.user,
+                est_lue=True
+            ).delete()
+
+            return Response({
+                'message': f'{deleted_count} notification(s) supprimée(s)',
+                'count': deleted_count
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression des notifications: {str(e)}")
+            return Response(
+                {'error': 'Erreur lors de la suppression des notifications'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

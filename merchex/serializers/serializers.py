@@ -11,7 +11,7 @@ from datetime import datetime, date
 from creation_bdd.creation_bdd import Match
 
 from listings.models import Classement, UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
-from listings.models import photo_profil, Press, Academie
+from listings.models import photo_profil, Press, Academie, Notification
 from rest_framework import serializers
 
 from django.contrib.auth.models import User
@@ -353,22 +353,62 @@ class UserRegistrationSerializer(serializers.Serializer):
         # Supprimer les champs qui ne font pas partie du modèle User
         accept_terms = validated_data.pop('accept_terms')
         validated_data.pop('confirm_password')
-        
+
         # Créer l'utilisateur
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
         )
-        
+
         # Créer l'enregistrement de vérification
         verification = Verification.objects.create(
             user=user,
             email_verified=False,
             accept_terms=accept_terms
         )
-        
+
         # Créer le token de vérification
         EmailVerificationToken.objects.create(user=user)
-        
+
         return user
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer pour les notifications"""
+    match_info = serializers.SerializerMethodField()
+    bet_info = serializers.SerializerMethodField()
+    type_display = serializers.CharField(source='get_type_notification_display', read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'type_notification', 'type_display', 'titre', 'message',
+            'est_lue', 'match_info', 'bet_info', 'points', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_match_info(self, obj):
+        """Retourne les informations du match si disponible"""
+        if obj.match:
+            return {
+                'id': obj.match.id,
+                'equipe1': obj.match.equipe1,
+                'equipe2': obj.match.equipe2,
+                'score1': obj.match.score1,
+                'score2': obj.match.score2,
+                'date': obj.match.date,
+                'heure': obj.match.heure,
+                'sport': obj.match.sport
+            }
+        return None
+
+    def get_bet_info(self, obj):
+        """Retourne les informations du pari si disponible"""
+        if obj.bet:
+            return {
+                'id': obj.bet.id,
+                'mise': obj.bet.mise,
+                'cote_totale': obj.bet.cote_totale,
+                'actif': obj.bet.actif
+            }
+        return None

@@ -523,3 +523,85 @@ class Classement(models.Model):
     def __str__(self):
         return f"{self.equipe} - {self.sport} {self.niveau} - Position {self.place}"
 
+class Notification(models.Model):
+    """Modèle pour les notifications utilisateur"""
+
+    TYPE_MATCH_TERMINE = 'MATCH_TERMINE'
+    TYPE_PARI_GAGNE = 'PARI_GAGNE'
+    TYPE_PARI_PERDU = 'PARI_PERDU'
+    TYPE_PARI_REMBOURSE = 'PARI_REMBOURSE'
+    TYPE_POINTS_GAGNES = 'POINTS_GAGNES'
+
+    TYPE_CHOICES = [
+        (TYPE_MATCH_TERMINE, 'Match terminé'),
+        (TYPE_PARI_GAGNE, 'Pari gagné'),
+        (TYPE_PARI_PERDU, 'Pari perdu'),
+        (TYPE_PARI_REMBOURSE, 'Pari remboursé'),
+        (TYPE_POINTS_GAGNES, 'Points gagnés'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name="Utilisateur"
+    )
+
+    type_notification = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        verbose_name="Type de notification"
+    )
+
+    titre = models.CharField(
+        max_length=200,
+        verbose_name="Titre"
+    )
+
+    message = models.TextField(
+        verbose_name="Message"
+    )
+
+    est_lue = models.BooleanField(
+        default=False,
+        verbose_name="Notification lue"
+    )
+
+    # Relations optionnelles pour lier aux objets concernés
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        verbose_name="Match"
+    )
+
+    bet = models.ForeignKey(
+        Bet,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        verbose_name="Pari"
+    )
+
+    points = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Points gagnés/perdus"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Date de création"
+    )
+
+    class Meta:
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_type_notification_display()} - {self.titre}"
+
