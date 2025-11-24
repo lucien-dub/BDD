@@ -1252,5 +1252,234 @@ def check_first_login(request):
     except Exception as e:
         logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
         return Response(
-            {'error': 'Erreur interne du serveur'}, 
+            {'error': 'Erreur interne du serveur'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================
+# ENDPOINTS POUR LES NOTIFICATIONS PUSH (FCM)
+# ============================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def register_fcm_token(request):
+    """
+    Enregistre un token FCM pour un appareil utilisateur
+
+    POST /api/fcm/register/
+    Body: {
+        "registration_id": "token_fcm_de_l_appareil",
+        "device_type": "ios|android|web",
+        "device_name": "iPhone 13" (optionnel)
+    }
+    """
+    from listings.models import FCMDevice
+
+    try:
+        registration_id = request.data.get('registration_id')
+        device_type = request.data.get('device_type', 'web')
+        device_name = request.data.get('device_name', '')
+
+        if not registration_id:
+            return Response(
+                {'error': 'Le token FCM (registration_id) est requis'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Vérifier si le token existe déjà pour cet utilisateur
+        device, created = FCMDevice.objects.get_or_create(
+            registration_id=registration_id,
+            defaults={
+                'user': request.user,
+                'device_type': device_type,
+                'device_name': device_name,
+                'active': True
+            }
+        )
+
+        if not created:
+            # Mettre à jour les informations de l'appareil
+            device.user = request.user
+            device.device_type = device_type
+            device.device_name = device_name
+            device.active = True
+            device.save()
+
+        logger.info(f"Token FCM enregistré pour {request.user.username}: {registration_id[:20]}...")
+
+        return Response({
+            'success': True,
+            'message': 'Token FCM enregistré avec succès',
+            'device': {
+                'id': device.id,
+                'device_type': device.device_type,
+                'device_name': device.device_name,
+                'created': created
+            }
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du token FCM: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de l\'enregistrement du token'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def unregister_fcm_token(request):
+    """
+    Supprime ou désactive un token FCM
+
+    POST /api/fcm/unregister/
+    Body: {
+        "registration_id": "token_fcm_de_l_appareil"
+    }
+    """
+    from listings.models import FCMDevice
+
+    try:
+        registration_id = request.data.get('registration_id')
+
+        if not registration_id:
+            return Response(
+                {'error': 'Le token FCM (registration_id) est requis'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Chercher et désactiver l'appareil
+        device = FCMDevice.objects.filter(
+            registration_id=registration_id,
+            user=request.user
+        ).first()
+
+        if device:
+            device.active = False
+            device.save()
+            logger.info(f"Token FCM désactivé pour {request.user.username}")
+
+            return Response({
+                'success': True,
+                'message': 'Token FCM désactivé avec succès'
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'error': 'Token FCM non trouvé'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        logger.error(f"Erreur lors de la suppression du token FCM: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la suppression du token'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_fcm_devices(request):
+    """
+    Liste tous les appareils FCM de l'utilisateur
+
+    GET /api/fcm/devices/
+    """
+    from listings.models import FCMDevice
+
+    try:
+        devices = FCMDevice.objects.filter(user=request.user, active=True)
+
+        devices_data = [{
+            'id': device.id,
+            'device_type': device.device_type,
+            'device_name': device.device_name,
+            'date_created': device.date_created.isoformat(),
+            'last_used': device.last_used.isoformat()
+        } for device in devices]
+
+        return Response({
+            'count': len(devices_data),
+            'devices': devices_data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des appareils FCM: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération des appareils'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_push_notifications(request):
+    """
+    Liste l'historique des notifications push de l'utilisateur
+
+    GET /api/notifications/history/
+    """
+    from listings.models import PushNotification
+
+    try:
+        notifications = PushNotification.objects.filter(user=request.user).order_by('-created_at')[:50]
+
+        notifications_data = [{
+            'id': notif.id,
+            'type': notif.notification_type,
+            'title': notif.title,
+            'message': notif.message,
+            'status': notif.status,
+            'data': notif.data,
+            'created_at': notif.created_at.isoformat(),
+            'sent_at': notif.sent_at.isoformat() if notif.sent_at else None
+        } for notif in notifications]
+
+        return Response({
+            'count': len(notifications_data),
+            'notifications': notifications_data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération de l'historique des notifications: {str(e)}")
+        return Response(
+            {'error': 'Erreur lors de la récupération de l\'historique'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_push_notification(request):
+    """
+    Endpoint de test pour envoyer une notification push
+
+    POST /api/fcm/test/
+    """
+    from listings.push_notifications import notification_service
+
+    try:
+        success = notification_service.send_notification(
+            user=request.user,
+            title="Test de notification",
+            message="Ceci est une notification de test du système Campus League",
+            notification_type='daily_bonus',
+            data={'test': True}
+        )
+
+        if success:
+            return Response({
+                'success': True,
+                'message': 'Notification de test envoyée avec succès'
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Aucun appareil actif trouvé ou erreur lors de l\'envoi'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi de la notification de test: {str(e)}")
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

@@ -137,47 +137,59 @@ class Bet(models.Model):
         """
         Vérifie le statut de tous les paris du groupe et attribue les points si tous sont gagnants
         """
+        from listings.push_notifications import notification_service
+
         tous_paris_gagnes = True
         paris_verifies = False  # Pour suivre si au moins un pari a été vérifié
         match_annule = False   # Pour suivre si un match est annulé
 
         for pari in self.paris.all():
             match = pari.match
-            
+
             # Vérifier si le match est terminé
             if match.est_termine:
                 paris_verifies = True
-                
+
                 # Vérifier si le match est annulé (score NaN)
                 if match.score1 == 'NaN' or match.score2 == 'NaN':
                     match_annule = True
                     break  # Sortir de la boucle car le bet sera annulé
-                
+
                 # Gérer les cas de forfait
                 if match.forfait_1 and pari.selection == '1':
                     pari.resultat = 'F1'
                     pari.save()
                     continue
-                    
+
                 if match.forfait_2 and pari.selection == '2':
                     pari.resultat = 'F2'
                     pari.save()
                     continue
-                
+
                 resultat_match = determiner_resultat_match(match)
-                
+
                 # Si la sélection ne correspond pas au résultat
                 if pari.selection != resultat_match:
                     tous_paris_gagnes = False
                     self.actif = False
                     self.save()
-                    
+
                     # Mettre à jour le résultat du pari
                     pari.resultat = resultat_match
                     pari.actif = False
                     pari.save()
+
+                    # Envoyer une notification de pari perdu
+                    if self.user:
+                        try:
+                            notification_service.send_bet_lost_notification(self)
+                        except Exception as e:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.error(f"Erreur lors de l'envoi de la notification de pari perdu: {str(e)}")
+
                     return False
-                
+
                 # Si le pari est gagnant, mettre à jour son résultat
                 pari.resultat = resultat_match
                 pari.save()
@@ -187,7 +199,7 @@ class Bet(models.Model):
             self.annule = True
             # Récupérer les points de l'utilisateur
             user_points = UserPoints.get_or_create_points(self.user)
-            
+
             # Créer une transaction pour tracer le remboursement
             PointTransaction.objects.create(
                 user=self.user,
@@ -195,28 +207,37 @@ class Bet(models.Model):
                 transaction_type=PointTransaction.EARN,
                 reason=f"Remboursement du pari #{self.id} - Match annulé"
             )
-            
+
             # Rendre les points à l'utilisateur
             user_points.total_points += self.mise
             user_points.save()
-            
+
             # Désactiver le pari
             self.actif = False
             self.save()
-            
+
             # Marquer tous les paris comme annulés
             self.paris.all().update(actif=False, resultat='NaN')
-            
+
+            # Envoyer une notification de pari remboursé
+            if self.user:
+                try:
+                    notification_service.send_bet_refunded_notification(self)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Erreur lors de l'envoi de la notification de remboursement: {str(e)}")
+
             return False
 
         # Si tous les paris sont gagnants et au moins un pari a été vérifié
         if tous_paris_gagnes and paris_verifies:
             # Calculer les gains
             gains = int(self.mise * self.cote_totale)
-            
+
             # Récupérer ou créer les points de l'utilisateur
             user_points = UserPoints.get_or_create_points(self.user)
-            
+
             # Créer une transaction pour tracer les points gagnés
             PointTransaction.objects.create(
                 user=self.user,
@@ -224,20 +245,29 @@ class Bet(models.Model):
                 transaction_type=PointTransaction.EARN,
                 reason=f"Gains du pari combiné #{self.id}"
             )
-            
+
             # Mettre à jour les points de l'utilisateur
             user_points.total_points += gains
             user_points.save()
-            
+
             # Désactiver le pari car il est terminé et gagné
             self.actif = False
             self.save()
-            
+
             # Désactiver tous les paris individuels
             self.paris.all().update(actif=False)
-            
+
+            # Envoyer une notification de pari gagné
+            if self.user:
+                try:
+                    notification_service.send_bet_won_notification(self)
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Erreur lors de l'envoi de la notification de pari gagné: {str(e)}")
+
             return True
-            
+
         return self.actif
 
 class Pari(models.Model):
@@ -522,4 +552,131 @@ class Classement(models.Model):
 
     def __str__(self):
         return f"{self.equipe} - {self.sport} {self.niveau} - Position {self.place}"
+
+
+class FCMDevice(models.Model):
+    """
+    Modèle pour stocker les tokens Firebase Cloud Messaging des utilisateurs
+    Permet d'envoyer des notifications push aux appareils des utilisateurs
+    """
+    DEVICE_TYPES = [
+        ('ios', 'iOS'),
+        ('android', 'Android'),
+        ('web', 'Web'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='fcm_devices',
+        verbose_name="Utilisateur"
+    )
+    registration_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name="Token FCM"
+    )
+    device_type = models.CharField(
+        max_length=10,
+        choices=DEVICE_TYPES,
+        default='web',
+        verbose_name="Type d'appareil"
+    )
+    device_name = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Nom de l'appareil"
+    )
+    active = models.BooleanField(
+        default=True,
+        verbose_name="Actif"
+    )
+    date_created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Date de création"
+    )
+    last_used = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Dernière utilisation"
+    )
+
+    class Meta:
+        verbose_name = "Appareil FCM"
+        verbose_name_plural = "Appareils FCM"
+        ordering = ['-last_used']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_type} ({self.registration_id[:20]}...)"
+
+
+class PushNotification(models.Model):
+    """
+    Modèle pour enregistrer l'historique des notifications push envoyées
+    """
+    NOTIFICATION_TYPES = [
+        ('bet_won', 'Pari gagné'),
+        ('bet_lost', 'Pari perdu'),
+        ('bet_refunded', 'Pari remboursé'),
+        ('match_started', 'Match commencé'),
+        ('daily_bonus', 'Bonus quotidien'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'En attente'),
+        ('sent', 'Envoyé'),
+        ('failed', 'Échoué'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='push_notifications',
+        verbose_name="Utilisateur"
+    )
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        verbose_name="Type de notification"
+    )
+    title = models.CharField(
+        max_length=100,
+        verbose_name="Titre"
+    )
+    message = models.TextField(
+        verbose_name="Message"
+    )
+    data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Données additionnelles"
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default='pending',
+        verbose_name="Statut"
+    )
+    sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Envoyé le"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Créé le"
+    )
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Message d'erreur"
+    )
+
+    class Meta:
+        verbose_name = "Notification Push"
+        verbose_name_plural = "Notifications Push"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_notification_type_display()} - {self.status}"
 

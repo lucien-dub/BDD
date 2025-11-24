@@ -79,6 +79,13 @@ urlpatterns = [
     path('api/user-points/', views.user_points, name='user_points'),
 
     path('api/check-first-login/', views.check_first_login, name='check_first_login'),
+
+    # Routes pour les notifications push (FCM)
+    path('api/fcm/register/', views.register_fcm_token, name='register_fcm_token'),
+    path('api/fcm/unregister/', views.unregister_fcm_token, name='unregister_fcm_token'),
+    path('api/fcm/devices/', views.list_fcm_devices, name='list_fcm_devices'),
+    path('api/fcm/test/', views.test_push_notification, name='test_push_notification'),
+    path('api/notifications/history/', views.list_push_notifications, name='list_push_notifications'),
 ]
 
 if settings.DEBUG:

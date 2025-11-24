@@ -255,3 +255,8 @@ DEFAULT_FROM_EMAIL = 'alexandre.montariol@campus-league.com'
 # Paramètres de l'application
 EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérification
 
+# Configuration Firebase Cloud Messaging (FCM)
+# IMPORTANT: Remplacer cette valeur par votre clé serveur FCM depuis Firebase Console
+# Aller sur: https://console.firebase.google.com/ > Projet > Paramètres du projet > Cloud Messaging > Clé du serveur
+FCM_SERVER_KEY = os.environ.get('FCM_SERVER_KEY', 'VOTRE_CLE_SERVEUR_FCM_ICI')
+
