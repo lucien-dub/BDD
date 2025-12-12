@@ -644,13 +644,13 @@ class LoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            # Mettre à jour le compteur de connexion
+            # ⚠️ NE PAS incrémenter le compteur ici !
+            # L'incrémentation se fera via /api/claim-daily-bonus/
+            # Juste s'assurer que le tracker existe
             try:
                 login_tracker = UserLoginTracker.objects.get(user=user)
-                login_tracker.increment_login_count()
             except UserLoginTracker.DoesNotExist:
                 login_tracker = UserLoginTracker.objects.create(user=user)
-                login_tracker.increment_login_count()
             
             # Connecter l'utilisateur
             login(request, user)
