@@ -78,13 +78,13 @@ def export_excel_website(url: str, df_original, name_file: str, academie: str):
             })
             
             df_new = df_new.loc[:, ~df_new.columns.duplicated()]
-            
-            if df_original.equals(pd.DataFrame(df_new)):
+
+            if not df_original.empty and df_original.equals(df_new):
                 print(f"Les fichiers sont identiques pour {academie}.")
                 return df_original, False
             else:
                 print(f"Les fichiers sont différents pour {academie}.")
-                return pd.DataFrame(df_new), True
+                return df_new, True
         else:
             print(f"Échec du téléchargement du fichier pour {academie}. Code de statut : {response.status_code}")
             return df_original, False
@@ -174,8 +174,8 @@ def import_matches_from_urls(url_resultats, url_planning, academie, current_df_r
 
                 if match_existant:
                     match_existant.match_joue = row.get('M. Joué', False)
-                    match_existant.score1 = row.get('Score 1', '')
-                    match_existant.score2 = row.get('Score 2', '')
+                    match_existant.score1 = int(row['Score 1']) if pd.notna(row.get('Score 1')) else 0
+                    match_existant.score2 = int(row['Score 2']) if pd.notna(row.get('Score 2')) else 0
                     match_existant.forfait_1 = row.get('Forf. 1', False)
                     match_existant.forfait_2 = row.get('Forf. 2', False)
                     match_existant.lieu = lieu

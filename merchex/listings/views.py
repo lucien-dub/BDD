@@ -16,7 +16,7 @@ from django.utils.crypto import get_random_string
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from background.actualisation_bdd import Match
+from listings.models import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import ClassementSerializer, MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
