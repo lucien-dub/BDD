@@ -69,14 +69,20 @@ class PariViewSet(viewsets.ModelViewSet):
 
 class BetViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-    
+
     def list(self, request):
         try:
-            # Récupérer tous les paris de l'utilisateur avec les relations nécessaires
-            queryset = Bet.objects.filter(user=request.user).prefetch_related(
+            # Optimisation : ne charger que les champs nécessaires avec only()
+            queryset = Bet.objects.filter(user=request.user).only(
+                'id', 'mise', 'cote_totale', 'date_creation', 'actif'
+            ).prefetch_related(
                 Prefetch(
                     'paris',
-                    queryset=Pari.objects.select_related('match')
+                    queryset=Pari.objects.select_related('match').only(
+                        'id', 'selection', 'cote', 'resultat', 'actif', 'match_id',
+                        'match__equipe1', 'match__equipe2', 'match__score1', 'match__score2',
+                        'match__date', 'match__heure', 'match__sport', 'match__niveau'
+                    )
                 )
             ).order_by('-date_creation')
             
@@ -185,10 +191,25 @@ class CreateBetView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
     
 class MatchsAPIView(APIView):
- 
-    def get(self, *args, **kwargs):
-        match = Match.objects.all()
-        serializer = MatchSerializer(match, many=True)
+    """
+    API pour récupérer les matchs avec pagination
+    """
+    def get(self, request, *args, **kwargs):
+        from .pagination import MatchPagination
+
+        # Optimisation : order_by pour garantir un ordre cohérent
+        matches = Match.objects.all().order_by('-date', '-heure')
+
+        # Appliquer la pagination
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(matches, request)
+
+        if page is not None:
+            serializer = MatchSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback si pas de pagination
+        serializer = MatchSerializer(matches, many=True)
         return Response(serializer.data)
 
 class CotesAPIView(APIView):
@@ -401,20 +422,23 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 class SearchMatchesAPIView(APIView):
     permission_classes = (permissions.AllowAny,)
+
     def get(self, request):
+        from .pagination import MatchPagination
+
         try:
             print("=== DEBUG SEARCH ===")
             query = request.GET.get('query', '')
             print(f"Recherche reçue : {query}")
             matches = Match.objects.all()
-           
+
             if query:
                 # Séparer les termes de recherche
                 search_terms = query.split()
-                
+
                 # Créer une requête Q initiale vide
                 combined_query = Q()
-                
+
                 # Pour chaque terme, ajouter une condition AND
                 for term in search_terms:
                     term_query = (
@@ -425,10 +449,19 @@ class SearchMatchesAPIView(APIView):
                         Q(poule__icontains=term)
                     )
                     combined_query &= term_query
-                
+
                 matches = matches.filter(combined_query).order_by('-date', '-heure')
-                
+
                 print(f"Nombre de matches trouvés : {matches.count()}")
+
+                # Appliquer la pagination
+                paginator = MatchPagination()
+                page = paginator.paginate_queryset(matches, request)
+
+                if page is not None:
+                    serializer = MatchSerializer(page, many=True)
+                    return paginator.get_paginated_response(serializer.data)
+
                 serializer = MatchSerializer(matches, many=True)
                 return Response({
                     'results': serializer.data,
@@ -727,59 +760,7 @@ class ResetPasswordView(APIView):
             return render(request, 'password_reset_form.html', {
                 'error': 'Lien de réinitialisation invalide ou expiré.'
             })
-    """Vue pour réinitialiser le mot de passe avec un token"""
-    permission_classes = []
-    
-    def get(self, request, token):
-        try:
-            token_obj = EmailVerificationToken.objects.get(token=token)
-            
-            if not token_obj.is_valid():
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
-                })
-            
-            return render(request, 'password_reset_form.html')
-        except EmailVerificationToken.DoesNotExist:
-            return render(request, 'password_reset_form.html', {
-                'error': 'Lien de réinitialisation invalide ou expiré.'
-            })
-    
-    def post(self, request, token):
-        try:
-            token_obj = EmailVerificationToken.objects.get(token=token)
-            
-            if not token_obj.is_valid():
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
-                })
-            
-            password = request.POST.get('password')
-            confirm_password = request.POST.get('confirm_password')
-            
-            if not password or not confirm_password:
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Les deux champs de mot de passe sont requis.'
-                })
-            
-            if password != confirm_password:
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Les mots de passe ne correspondent pas.'
-                })
-            
-            user = token_obj.user
-            user.set_password(password)
-            user.save()
-            
-            # Supprimer le token utilisé
-            token_obj.delete()
-            
-            return render(request, 'password_reset_success.html')
-        except EmailVerificationToken.DoesNotExist:
-            return render(request, 'password_reset_form.html', {
-                'error': 'Lien de réinitialisation invalide ou expiré.'
-            })
-        
+
 class UserStatisticsAPIView(APIView):
     permission_classes = [IsAuthenticated]
     

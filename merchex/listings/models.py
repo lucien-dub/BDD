@@ -8,17 +8,12 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.crypto import get_random_string
 from django.utils import timezone
 from datetime import datetime, time, timedelta
-from django.db import models
 from django.core.exceptions import ValidationError
 from decimal import Decimal
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 import os
-
-class MyManager(models.Manager):
-    def custom_method(self):
-        return self.filter(is_active=True)
 
 def determiner_resultat_match(match):
     """
@@ -77,41 +72,47 @@ class Match(models.Model):
         # Si les scores ont changé, vérifier les paris associés
         if self.pk:  # Si ce n'est pas une nouvelle création
             old_match = Match.objects.get(pk=self.pk)
-            if (old_match.score1 != self.score1 or 
+            if (old_match.score1 != self.score1 or
                 old_match.score2 != self.score2):
-                
-                # Récupérer tous les paris actifs liés à ce match
-                paris_actifs = self.paris.filter(actif=True)
-                
+
+                # Optimisation : utiliser select_related pour éviter les requêtes N+1
+                paris_actifs = self.paris.filter(actif=True).select_related('bet')
+
                 # Pour chaque pari, vérifier le statut du groupe
                 for pari in paris_actifs:
                     if pari.bet:  # Si le pari appartient à un groupe
                         pari.bet.verifier_statut()
-        
+
         super().save(*args, **kwargs)
 
     class Meta:
         db_table = 'creation_bdd_match'
         unique_together = ('sport', 'date', 'heure', 'equipe1', 'equipe2')
-    
+        indexes = [
+            models.Index(fields=['sport', 'date']),
+            models.Index(fields=['academie', 'date']),
+            models.Index(fields=['date', 'heure']),
+            models.Index(fields=['sport', 'niveau']),
+        ]
+
     def __str__(self):
         return f"{self.equipe1} vs {self.equipe2} - {self.date}"
     
 class Cote(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="cotes")
-    coteN = models.FloatField(max_length=5, default = 1.1)
-    cote1 = models.FloatField(max_length=5, default = 1.1)
-    cote2 = models.FloatField(max_length=5, default = 1.1)
+    coteN = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
+    cote1 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
+    cote2 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
 
     def __str__(self):
         return f"Cote pour {self.match},équipe1: {self.cote1}, équipe2: {self.cote2}, match nul :{self.coteN}"
 
 class Bet(models.Model):
     id = models.BigAutoField(primary_key=True)
-    mise = models.FloatField(max_length=6, default=0)
+    mise = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
-    cote_totale = models.FloatField(max_length=5, default=1)
-    annule = models.BooleanField(default='False')
+    cote_totale = models.DecimalField(max_digits=5, decimal_places=2, default=1)
+    annule = models.BooleanField(default=False)
 
     # Ajout d'une relation avec l'utilisateur
     user = models.ForeignKey(
@@ -132,6 +133,11 @@ class Bet(models.Model):
         verbose_name = "Bets"
         verbose_name_plural = "Bets"
         ordering = ['-date_creation']
+        indexes = [
+            models.Index(fields=['user', 'actif']),
+            models.Index(fields=['user', '-date_creation']),
+            models.Index(fields=['actif', '-date_creation']),
+        ]
 
     def verifier_statut(self):
         """
@@ -141,7 +147,8 @@ class Bet(models.Model):
         paris_verifies = False  # Pour suivre si au moins un pari a été vérifié
         match_annule = False   # Pour suivre si un match est annulé
 
-        for pari in self.paris.all():
+        # Optimisation : utiliser select_related pour éviter les requêtes N+1
+        for pari in self.paris.select_related('match').all():
             match = pari.match
             
             # Vérifier si le match est terminé
@@ -211,9 +218,9 @@ class Bet(models.Model):
 
         # Si tous les paris sont gagnants et au moins un pari a été vérifié
         if tous_paris_gagnes and paris_verifies:
-            # Calculer les gains
-            gains = int(self.mise * self.cote_totale)
-            
+            # Calculer les gains avec Decimal pour éviter les erreurs d'arrondi
+            gains = int(Decimal(str(self.mise)) * Decimal(str(self.cote_totale)))
+
             # Récupérer ou créer les points de l'utilisateur
             user_points = UserPoints.get_or_create_points(self.user)
             
@@ -313,6 +320,11 @@ class Pari(models.Model):
         verbose_name = "Pari"
         verbose_name_plural = "Paris"
         ordering = ['-date_creation']
+        indexes = [
+            models.Index(fields=['match', 'actif']),
+            models.Index(fields=['bet', 'actif']),
+            models.Index(fields=['actif', 'resultat']),
+        ]
 
     def __str__(self):
         return f"Pari {self.get_selection_display()} sur {self.match}"
