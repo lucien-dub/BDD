@@ -8,9 +8,7 @@ from rest_framework import status
 from django.utils import timezone
 from datetime import datetime, date
 
-from creation_bdd.creation_bdd import Match
-
-from listings.models import Classement, UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
+from listings.models import Match, Classement, UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
 from listings.models import photo_profil, Press, Academie
 from rest_framework import serializers
 
