@@ -201,7 +201,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '/home/ubuntu/BDD/merchex/logs/django.log', 
+            'filename': str(BASE_DIR / 'logs' / 'django.log'),
         },
         'console': {
             'level': 'DEBUG',

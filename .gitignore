@@ -21,6 +21,10 @@ __pycache__/
 # Logs
 *.log
 
+# Environnements virtuels
+venv-linux/
+venv-*/
+
 # Fichiers Django
 media/
 staticfiles/
