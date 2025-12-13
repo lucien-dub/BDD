@@ -7,13 +7,13 @@ from listings import views
 from listings.views import (
     ClassementByPouleView,
     ClassementDetailView,
-    RegisterView, 
-    CustomTokenObtainPairView, 
+    RegisterView,
+    CustomTokenObtainPairView,
     PariViewSet,
-    MatchsAPIView, 
+    MatchsAPIView,
     CotesAPIView,
-    UserViewSet, 
-    UsersPointsAPIView, 
+    UserViewSet,
+    UsersPointsAPIView,
     UpdateCotesView,
     SearchMatchesAPIView,
     CreateBetView,
@@ -23,6 +23,7 @@ from listings.views import (
     AcademieViewSet,
     VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
     ClassementView,
+    AllUsersBetsAPIView,
 )
 
 from django.conf import settings
@@ -79,6 +80,7 @@ urlpatterns = [
     path('api/user-points/', views.user_points, name='user_points'),
 
     path('api/check-first-login/', views.check_first_login, name='check_first_login'),
+    path('api/all-users-bets/', AllUsersBetsAPIView.as_view(), name='all-users-bets'),
 ]
 
 if settings.DEBUG:

@@ -1175,7 +1175,7 @@ def check_first_login(request):
     try:
         user = request.user
         today = timezone.now().date()
-        
+
         # Récupérer ou créer le tracking utilisateur
         login_tracker, created = UserLoginTracker.objects.get_or_create(
             user=user,
@@ -1184,10 +1184,10 @@ def check_first_login(request):
                 'last_reset': today
             }
         )
-        
+
         # Déterminer si c'est la première connexion globale
         is_first_login = created or login_tracker.total_login_count <= 1
-        
+
         # Vérifier si c'est la première connexion du jour
         is_first_daily_login = False
         if login_tracker.last_reset != today:
@@ -1197,16 +1197,16 @@ def check_first_login(request):
             login_tracker.save()
         elif login_tracker.daily_login_count == 0:
             is_first_daily_login = True
-        
+
         # Générer de nouveaux tokens pour la sécurité
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
-        
+
         # Si c'est la première connexion, ne pas incrémenter tout de suite
         # (ce sera fait lors de la réclamation du bonus)
-        
+
         response_data = {
             'is_first_login': is_first_login,
             'is_first_daily_login': is_first_daily_login,
@@ -1223,15 +1223,62 @@ def check_first_login(request):
                 'last_login_date': login_tracker.last_reset.isoformat() if login_tracker.last_reset else today.isoformat()
             }
         }
-        
+
         logger.info(f"Vérification première connexion pour {user.username}: "
                    f"première_globale={is_first_login}, "
                    f"première_quotidienne={is_first_daily_login}")
-        
+
         return Response(response_data, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
         return Response(
-            {'error': 'Erreur interne du serveur'}, 
+            {'error': 'Erreur interne du serveur'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AllUsersBetsAPIView(APIView):
+    """
+    Retourne tous les paris de tous les utilisateurs pour le leaderboard hebdomadaire
+    """
+    def get(self, request):
+        # Récupérer tous les utilisateurs
+        users = User.objects.all()
+
+        result = []
+        for user in users:
+            # Récupérer tous les paris de l'utilisateur avec les détails des matchs
+            bets = Bet.objects.filter(user_id=user.id).prefetch_related(
+                'paris__match'
+            ).all()
+
+            bets_data = []
+            for bet in bets:
+                paris_data = []
+                for pari in bet.paris.all():
+                    paris_data.append({
+                        'match_id': pari.match.id,
+                        'pronostic': pari.selection,
+                        'match': {
+                            'score1': pari.match.score1,
+                            'score2': pari.match.score2
+                        }
+                    })
+
+                bets_data.append({
+                    'id': bet.id,
+                    'user_id': bet.user_id,
+                    'mise': float(bet.mise),
+                    'cote_totale': float(bet.cote_totale),
+                    'date_creation': bet.date_creation.isoformat(),
+                    'actif': bet.actif,
+                    'annule': bet.annule,
+                    'paris': paris_data
+                })
+
+            result.append({
+                'username': user.username,
+                'bets': bets_data
+            })
+
+        return JsonResponse(result, safe=False)
