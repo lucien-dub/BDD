@@ -1282,3 +1282,114 @@ class AllUsersBetsAPIView(APIView):
             })
 
         return JsonResponse(result, safe=False)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_academies(request):
+    """Retourne la liste de toutes les académies disponibles"""
+    academies = Match.objects.filter(
+        match_joue=False  # Seulement matchs non joués
+    ).values_list('academie', flat=True).distinct().order_by('academie')
+
+    return Response({
+        'academies': list(academies),
+        'count': len(academies)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_sports(request):
+    """Retourne la liste de tous les sports disponibles"""
+    sports = Match.objects.filter(
+        match_joue=False
+    ).values_list('sport', flat=True).distinct().order_by('sport')
+
+    return Response({
+        'sports': list(sports),
+        'count': len(sports)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_filtered_matches(request):
+    """
+    Retourne les matchs filtrés et paginés côté serveur
+    Query params: academie, sport, niveau, page, page_size
+    """
+    # Récupérer les paramètres de filtrage
+    academie = request.GET.get('academie', None)
+    sport = request.GET.get('sport', None)
+    niveau = request.GET.get('niveau', None)
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 15))
+
+    # Filtrer les matchs
+    queryset = Match.objects.filter(match_joue=False)
+
+    if academie and academie != 'all':
+        queryset = queryset.filter(academie=academie)
+
+    if sport and sport != 'all':
+        queryset = queryset.filter(sport__icontains=sport)
+
+    if niveau and niveau != 'all':
+        queryset = queryset.filter(niveau=niveau)
+
+    # Trier par date
+    queryset = queryset.order_by('date', 'heure')
+
+    # Pagination
+    start = (page - 1) * page_size
+    end = start + page_size
+    total_count = queryset.count()
+
+    matches = queryset[start:end]
+
+    # Sérialiser
+    serializer = MatchSerializer(matches, many=True)
+
+    return Response({
+        'count': total_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total_count + page_size - 1) // page_size,
+        'has_next': end < total_count,
+        'has_previous': page > 1,
+        'results': serializer.data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_filtered_results(request):
+    """
+    Retourne les résultats filtrés côté serveur
+    Query params: academie, sport, date_debut, date_fin
+    """
+    academie = request.GET.get('academie', None)
+    sport = request.GET.get('sport', None)
+
+    # Filtrer les matchs joués
+    queryset = Match.objects.filter(
+        Q(match_joue=True) |
+        Q(score1__isnull=False, score2__isnull=False)
+    )
+
+    if academie and academie != 'all':
+        queryset = queryset.filter(academie=academie)
+
+    if sport and sport != 'all':
+        queryset = queryset.filter(sport__icontains=sport)
+
+    # Trier par date décroissante
+    queryset = queryset.order_by('-date', '-heure')
+
+    serializer = MatchSerializer(queryset, many=True)
+
+    return Response({
+        'count': queryset.count(),
+        'results': serializer.data
+    })
