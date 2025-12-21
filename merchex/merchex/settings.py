@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-41w*dyx86+2cb*lms16sg_8m0-z3=rn-3_#wsxf%b0mj_v_z+v
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['213.32.91.54','vps-dde127df.vps.ovh.net','localhost','127.0.0.1','campus-league.com','www.campus-league.com']
+ALLOWED_HOSTS = ['213.32.91.54','vps-dde127df.vps.ovh.net','localhost','127.0.0.1','campus-league.com','www.campus-league.com', 'test.campus-league.com', 'www.test.campus-league.com']
 
 # Paramètres pour fonctionner derrière un proxy
 USE_X_FORWARDED_HOST = True

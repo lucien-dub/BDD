@@ -87,7 +87,7 @@ urlpatterns = [
     path('api/all-users-bets/', AllUsersBetsAPIView.as_view(), name='all-users-bets'),
 
     # Nouveaux endpoints optimisés pour filtrage et pagination
-    path('api/academies/available/', views.get_available_academies, name='available_academies'),
+    path('api/academies-available/', views.get_available_academies, name='available_academies'),
     path('api/sports/available/', views.get_available_sports, name='available_sports'),
     path('api/matches/filtered/', views.get_filtered_matches, name='filtered_matches'),
     path('api/results/filtered/', views.get_filtered_results, name='filtered_results'),
