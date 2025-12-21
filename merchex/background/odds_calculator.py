@@ -11,22 +11,25 @@ def calculer_cotes(match_id):
     try:
         match = Match.objects.get(id=match_id)
         date_limite = match.date - timedelta(days=365)
-        
+
         historique = Match.objects.filter(
             date__gte=date_limite,
             date__lt=match.date,
             sport=match.sport,
             niveau=match.niveau
         )
-        
-        pari = Pari.objects.get(match.id ==match_id)
 
-        if pari != []:
-            v1 = 0
-            v2 = 0
-            vN = 0
-            for p in pari:
-                sel = p.match.selection
+        # Correction du bug : utiliser filter au lieu de get, et corriger la syntaxe
+        paris = Pari.objects.filter(match_id=match_id)
+
+        v1 = 0
+        v2 = 0
+        vN = 0
+
+        # Compter les paris existants
+        if paris.exists():
+            for p in paris:
+                sel = p.selection
                 if sel == '1':
                     v1 += 1
                 elif sel == '2':
@@ -40,17 +43,25 @@ def calculer_cotes(match_id):
         stats_eq1 = historique.filter(equipe1=match.equipe1)
         victoires_eq1 = stats_eq1.filter(score1__gt=F('score2')).count()
         matches_eq1 = stats_eq1.count()
-        
+
         # Statistiques équipe 2
         stats_eq2 = historique.filter(equipe1=match.equipe2)
         victoires_eq2 = stats_eq2.filter(score1__gt=F('score2')).count()
         matches_eq2 = stats_eq2.count()
-        
-        # Calcul des probabilités
+
+        # Calcul des probabilités avec protection contre division par zéro
         if matches_eq1 > 0 and matches_eq2 > 0:
-            prob_eq1 = victoires_eq1 / matches_eq1 + v1/vtot
-            prob_eq2 = victoires_eq2 / matches_eq2 + v2/vtot
-            prob_nul = 1 - (prob_eq1 + prob_eq2) + vN/vtot
+            prob_eq1 = victoires_eq1 / matches_eq1
+            prob_eq2 = victoires_eq2 / matches_eq2
+
+            # Ajouter l'influence des paris seulement s'il y en a
+            if vtot > 0:
+                prob_eq1 += v1/vtot * 0.1  # Pondération de 10% pour les paris
+                prob_eq2 += v2/vtot * 0.1
+
+            prob_nul = 1 - (prob_eq1 + prob_eq2)
+            if vtot > 0:
+                prob_nul += vN/vtot * 0.1
             
             total_prob = prob_eq1 + prob_eq2 + prob_nul
             if total_prob > 0:

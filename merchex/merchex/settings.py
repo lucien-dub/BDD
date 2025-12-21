@@ -131,10 +131,17 @@ SIMPLE_JWT = {
 }
 
 CRONJOBS = [
-    ('0 0 * * *', 'listings.cron.update_all_cotes'),
-    ('0 0 * * *', 'django.core.management.call_command', ['reset_login_counts']),
-    ('*/30 * * * *', 'django.core.management.call_command', ['update_matches']),  # Toutes les 30 min
-    ('*/30 * * * *', 'django.core.management.call_command', ['update_classements']), # Toutes les 30 min
+    # Mise à jour des cotes - tous les jours à minuit
+    ('0 0 * * *', 'cron.update_all_cotes'),
+
+    # Réinitialisation des compteurs de connexion - tous les jours à minuit
+    ('0 0 * * *', 'cron.reset_login_counters'),
+
+    # Actualisation des données de matchs depuis le site FFSU - toutes les 30 minutes
+    ('*/30 * * * *', 'cron.update_matches_data'),
+
+    # Actualisation des classements - toutes les 30 minutes
+    ('*/30 * * * *', 'cron.update_classements_data'),
 ]
 
 ROOT_URLCONF = 'merchex.urls'

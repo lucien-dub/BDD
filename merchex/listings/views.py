@@ -16,7 +16,7 @@ from django.utils.crypto import get_random_string
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
-from background.actualisation_bdd import Match
+from listings.models import Match
 from background.odds_calculator import calculer_cotes
 from serializers.serializers import ClassementSerializer, MatchSerializer, CoteSerializer
 from serializers.serializers import UserSerializer, UserPointsSerializer, PointTransactionSerializer
@@ -69,14 +69,20 @@ class PariViewSet(viewsets.ModelViewSet):
 
 class BetViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-    
+
     def list(self, request):
         try:
-            # Récupérer tous les paris de l'utilisateur avec les relations nécessaires
-            queryset = Bet.objects.filter(user=request.user).prefetch_related(
+            # Optimisation : ne charger que les champs nécessaires avec only()
+            queryset = Bet.objects.filter(user=request.user).only(
+                'id', 'mise', 'cote_totale', 'date_creation', 'actif'
+            ).prefetch_related(
                 Prefetch(
                     'paris',
-                    queryset=Pari.objects.select_related('match')
+                    queryset=Pari.objects.select_related('match').only(
+                        'id', 'selection', 'cote', 'resultat', 'actif', 'match_id',
+                        'match__equipe1', 'match__equipe2', 'match__score1', 'match__score2',
+                        'match__date', 'match__heure', 'match__sport', 'match__niveau'
+                    )
                 )
             ).order_by('-date_creation')
             
@@ -185,10 +191,25 @@ class CreateBetView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
     
 class MatchsAPIView(APIView):
- 
-    def get(self, *args, **kwargs):
-        match = Match.objects.all()
-        serializer = MatchSerializer(match, many=True)
+    """
+    API pour récupérer les matchs avec pagination
+    """
+    def get(self, request, *args, **kwargs):
+        from .pagination import MatchPagination
+
+        # Optimisation : order_by pour garantir un ordre cohérent
+        matches = Match.objects.all().order_by('-date', '-heure')
+
+        # Appliquer la pagination
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(matches, request)
+
+        if page is not None:
+            serializer = MatchSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback si pas de pagination
+        serializer = MatchSerializer(matches, many=True)
         return Response(serializer.data)
 
 class CotesAPIView(APIView):
@@ -401,20 +422,23 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 class SearchMatchesAPIView(APIView):
     permission_classes = (permissions.AllowAny,)
+
     def get(self, request):
+        from .pagination import MatchPagination
+
         try:
             print("=== DEBUG SEARCH ===")
             query = request.GET.get('query', '')
             print(f"Recherche reçue : {query}")
             matches = Match.objects.all()
-           
+
             if query:
                 # Séparer les termes de recherche
                 search_terms = query.split()
-                
+
                 # Créer une requête Q initiale vide
                 combined_query = Q()
-                
+
                 # Pour chaque terme, ajouter une condition AND
                 for term in search_terms:
                     term_query = (
@@ -425,10 +449,19 @@ class SearchMatchesAPIView(APIView):
                         Q(poule__icontains=term)
                     )
                     combined_query &= term_query
-                
+
                 matches = matches.filter(combined_query).order_by('-date', '-heure')
-                
+
                 print(f"Nombre de matches trouvés : {matches.count()}")
+
+                # Appliquer la pagination
+                paginator = MatchPagination()
+                page = paginator.paginate_queryset(matches, request)
+
+                if page is not None:
+                    serializer = MatchSerializer(page, many=True)
+                    return paginator.get_paginated_response(serializer.data)
+
                 serializer = MatchSerializer(matches, many=True)
                 return Response({
                     'results': serializer.data,
@@ -644,13 +677,13 @@ class LoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            # Mettre à jour le compteur de connexion
+            # ⚠️ NE PAS incrémenter le compteur ici !
+            # L'incrémentation se fera via /api/claim-daily-bonus/
+            # Juste s'assurer que le tracker existe
             try:
                 login_tracker = UserLoginTracker.objects.get(user=user)
-                login_tracker.increment_login_count()
             except UserLoginTracker.DoesNotExist:
                 login_tracker = UserLoginTracker.objects.create(user=user)
-                login_tracker.increment_login_count()
             
             # Connecter l'utilisateur
             login(request, user)
@@ -727,59 +760,7 @@ class ResetPasswordView(APIView):
             return render(request, 'password_reset_form.html', {
                 'error': 'Lien de réinitialisation invalide ou expiré.'
             })
-    """Vue pour réinitialiser le mot de passe avec un token"""
-    permission_classes = []
-    
-    def get(self, request, token):
-        try:
-            token_obj = EmailVerificationToken.objects.get(token=token)
-            
-            if not token_obj.is_valid():
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
-                })
-            
-            return render(request, 'password_reset_form.html')
-        except EmailVerificationToken.DoesNotExist:
-            return render(request, 'password_reset_form.html', {
-                'error': 'Lien de réinitialisation invalide ou expiré.'
-            })
-    
-    def post(self, request, token):
-        try:
-            token_obj = EmailVerificationToken.objects.get(token=token)
-            
-            if not token_obj.is_valid():
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Le lien de réinitialisation a expiré. Veuillez en demander un nouveau.'
-                })
-            
-            password = request.POST.get('password')
-            confirm_password = request.POST.get('confirm_password')
-            
-            if not password or not confirm_password:
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Les deux champs de mot de passe sont requis.'
-                })
-            
-            if password != confirm_password:
-                return render(request, 'password_reset_form.html', {
-                    'error': 'Les mots de passe ne correspondent pas.'
-                })
-            
-            user = token_obj.user
-            user.set_password(password)
-            user.save()
-            
-            # Supprimer le token utilisé
-            token_obj.delete()
-            
-            return render(request, 'password_reset_success.html')
-        except EmailVerificationToken.DoesNotExist:
-            return render(request, 'password_reset_form.html', {
-                'error': 'Lien de réinitialisation invalide ou expiré.'
-            })
-        
+
 class UserStatisticsAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1194,7 +1175,7 @@ def check_first_login(request):
     try:
         user = request.user
         today = timezone.now().date()
-        
+
         # Récupérer ou créer le tracking utilisateur
         login_tracker, created = UserLoginTracker.objects.get_or_create(
             user=user,
@@ -1203,10 +1184,10 @@ def check_first_login(request):
                 'last_reset': today
             }
         )
-        
+
         # Déterminer si c'est la première connexion globale
         is_first_login = created or login_tracker.total_login_count <= 1
-        
+
         # Vérifier si c'est la première connexion du jour
         is_first_daily_login = False
         if login_tracker.last_reset != today:
@@ -1216,16 +1197,16 @@ def check_first_login(request):
             login_tracker.save()
         elif login_tracker.daily_login_count == 0:
             is_first_daily_login = True
-        
+
         # Générer de nouveaux tokens pour la sécurité
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
-        
+
         # Si c'est la première connexion, ne pas incrémenter tout de suite
         # (ce sera fait lors de la réclamation du bonus)
-        
+
         response_data = {
             'is_first_login': is_first_login,
             'is_first_daily_login': is_first_daily_login,
@@ -1242,15 +1223,173 @@ def check_first_login(request):
                 'last_login_date': login_tracker.last_reset.isoformat() if login_tracker.last_reset else today.isoformat()
             }
         }
-        
+
         logger.info(f"Vérification première connexion pour {user.username}: "
                    f"première_globale={is_first_login}, "
                    f"première_quotidienne={is_first_daily_login}")
-        
+
         return Response(response_data, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         logger.error(f"Erreur lors de la vérification de première connexion: {str(e)}")
         return Response(
-            {'error': 'Erreur interne du serveur'}, 
+            {'error': 'Erreur interne du serveur'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AllUsersBetsAPIView(APIView):
+    """
+    Retourne tous les paris de tous les utilisateurs pour le leaderboard hebdomadaire
+    """
+    def get(self, request):
+        # Récupérer tous les utilisateurs
+        users = User.objects.all()
+
+        result = []
+        for user in users:
+            # Récupérer tous les paris de l'utilisateur avec les détails des matchs
+            bets = Bet.objects.filter(user_id=user.id).prefetch_related(
+                'paris__match'
+            ).all()
+
+            bets_data = []
+            for bet in bets:
+                paris_data = []
+                for pari in bet.paris.all():
+                    paris_data.append({
+                        'match_id': pari.match.id,
+                        'pronostic': pari.selection,
+                        'match': {
+                            'score1': pari.match.score1,
+                            'score2': pari.match.score2
+                        }
+                    })
+
+                bets_data.append({
+                    'id': bet.id,
+                    'user_id': bet.user_id,
+                    'mise': float(bet.mise),
+                    'cote_totale': float(bet.cote_totale),
+                    'date_creation': bet.date_creation.isoformat(),
+                    'actif': bet.actif,
+                    'annule': bet.annule,
+                    'paris': paris_data
+                })
+
+            result.append({
+                'username': user.username,
+                'bets': bets_data
+            })
+
+        return JsonResponse(result, safe=False)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_academies(request):
+    """Retourne la liste de toutes les académies disponibles"""
+    academies = Match.objects.filter(
+        match_joue=False  # Seulement matchs non joués
+    ).values_list('academie', flat=True).distinct().order_by('academie')
+
+    return Response({
+        'academies': list(academies),
+        'count': len(academies)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_sports(request):
+    """Retourne la liste de tous les sports disponibles"""
+    sports = Match.objects.filter(
+        match_joue=False
+    ).values_list('sport', flat=True).distinct().order_by('sport')
+
+    return Response({
+        'sports': list(sports),
+        'count': len(sports)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_filtered_matches(request):
+    """
+    Retourne les matchs filtrés et paginés côté serveur
+    Query params: academie, sport, niveau, page, page_size
+    """
+    # Récupérer les paramètres de filtrage
+    academie = request.GET.get('academie', None)
+    sport = request.GET.get('sport', None)
+    niveau = request.GET.get('niveau', None)
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 15))
+
+    # Filtrer les matchs
+    queryset = Match.objects.filter(match_joue=False)
+
+    if academie and academie != 'all':
+        queryset = queryset.filter(academie=academie)
+
+    if sport and sport != 'all':
+        queryset = queryset.filter(sport__icontains=sport)
+
+    if niveau and niveau != 'all':
+        queryset = queryset.filter(niveau=niveau)
+
+    # Trier par date
+    queryset = queryset.order_by('date', 'heure')
+
+    # Pagination
+    start = (page - 1) * page_size
+    end = start + page_size
+    total_count = queryset.count()
+
+    matches = queryset[start:end]
+
+    # Sérialiser
+    serializer = MatchSerializer(matches, many=True)
+
+    return Response({
+        'count': total_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total_count + page_size - 1) // page_size,
+        'has_next': end < total_count,
+        'has_previous': page > 1,
+        'results': serializer.data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_filtered_results(request):
+    """
+    Retourne les résultats filtrés côté serveur
+    Query params: academie, sport, date_debut, date_fin
+    """
+    academie = request.GET.get('academie', None)
+    sport = request.GET.get('sport', None)
+
+    # Filtrer les matchs joués
+    queryset = Match.objects.filter(
+        Q(match_joue=True) |
+        Q(score1__isnull=False, score2__isnull=False)
+    )
+
+    if academie and academie != 'all':
+        queryset = queryset.filter(academie=academie)
+
+    if sport and sport != 'all':
+        queryset = queryset.filter(sport__icontains=sport)
+
+    # Trier par date décroissante
+    queryset = queryset.order_by('-date', '-heure')
+
+    serializer = MatchSerializer(queryset, many=True)
+
+    return Response({
+        'count': queryset.count(),
+        'results': serializer.data
+    })
