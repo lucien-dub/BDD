@@ -24,6 +24,10 @@ from listings.views import (
     VerifyEmailView, ResetPasswordView, LoginView, ForgotPasswordView,
     ClassementView,
     AllUsersBetsAPIView,
+    get_available_academies,
+    get_available_sports,
+    get_filtered_matches,
+    get_filtered_results,
 )
 
 from django.conf import settings
