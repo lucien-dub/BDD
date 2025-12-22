@@ -1326,11 +1326,16 @@ def get_filtered_matches(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 15))
 
+    # Date actuelle pour le filtrage
+    today = timezone.now().date()
+
     # Filtrer STRICTEMENT les matchs à venir (non commencés):
     # - match_joue=False (pas encore joué)
+    # - ET date >= aujourd'hui (matchs futurs ou aujourd'hui)
     # - ET pas de scores définitifs (pour éviter les incohérences)
     queryset = Match.objects.filter(
-        match_joue=False
+        match_joue=False,
+        date__gte=today
     ).filter(
         Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
     )
@@ -1383,13 +1388,18 @@ def get_filtered_results(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 50))
 
+    # Date actuelle pour le filtrage
+    today = timezone.now().date()
+
     # Filtrer STRICTEMENT les matchs terminés:
     # - match_joue=True (marqué comme joué)
     # - ET a des scores (score1 et score2 non null)
+    # - ET date < aujourd'hui (matchs passés uniquement)
     queryset = Match.objects.filter(
         match_joue=True,
         score1__isnull=False,
-        score2__isnull=False
+        score2__isnull=False,
+        date__lt=today
     )
 
     # Filtrage par académie
