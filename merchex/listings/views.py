@@ -1316,7 +1316,7 @@ def get_available_sports(request):
 @permission_classes([IsAuthenticated])
 def get_filtered_matches(request):
     """
-    Retourne les matchs filtrés et paginés côté serveur
+    Retourne les matchs à venir filtrés et paginés côté serveur
     Query params: academie, sport, niveau, page, page_size
     """
     # Récupérer les paramètres de filtrage
@@ -1326,19 +1326,28 @@ def get_filtered_matches(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 15))
 
-    # Filtrer les matchs
-    queryset = Match.objects.filter(match_joue=False)
+    # Filtrer STRICTEMENT les matchs à venir (non commencés):
+    # - match_joue=False (pas encore joué)
+    # - ET pas de scores définitifs (pour éviter les incohérences)
+    queryset = Match.objects.filter(
+        match_joue=False
+    ).filter(
+        Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
+    )
 
+    # Filtrage par académie
     if academie and academie != 'all':
         queryset = queryset.filter(academie=academie)
 
+    # Filtrage par sport
     if sport and sport != 'all':
         queryset = queryset.filter(sport__icontains=sport)
 
+    # Filtrage par niveau
     if niveau and niveau != 'all':
         queryset = queryset.filter(niveau=niveau)
 
-    # Trier par date
+    # Trier par date (prochains matchs en premier)
     queryset = queryset.order_by('date', 'heure')
 
     # Pagination
@@ -1366,30 +1375,48 @@ def get_filtered_matches(request):
 @permission_classes([IsAuthenticated])
 def get_filtered_results(request):
     """
-    Retourne les résultats filtrés côté serveur
-    Query params: academie, sport, date_debut, date_fin
+    Retourne les résultats filtrés côté serveur (matchs terminés)
+    Query params: academie, sport, page, page_size
     """
     academie = request.GET.get('academie', None)
     sport = request.GET.get('sport', None)
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 50))
 
-    # Filtrer les matchs joués
+    # Filtrer STRICTEMENT les matchs terminés:
+    # - match_joue=True (marqué comme joué)
+    # - ET a des scores (score1 et score2 non null)
     queryset = Match.objects.filter(
-        Q(match_joue=True) |
-        Q(score1__isnull=False, score2__isnull=False)
+        match_joue=True,
+        score1__isnull=False,
+        score2__isnull=False
     )
 
+    # Filtrage par académie
     if academie and academie != 'all':
         queryset = queryset.filter(academie=academie)
 
+    # Filtrage par sport
     if sport and sport != 'all':
         queryset = queryset.filter(sport__icontains=sport)
 
-    # Trier par date décroissante
+    # Trier par date décroissante (plus récents en premier)
     queryset = queryset.order_by('-date', '-heure')
 
-    serializer = MatchSerializer(queryset, many=True)
+    # Pagination
+    total_count = queryset.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    matches = queryset[start:end]
+
+    serializer = MatchSerializer(matches, many=True)
 
     return Response({
-        'count': queryset.count(),
+        'count': total_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total_count + page_size - 1) // page_size,
+        'has_next': end < total_count,
+        'has_previous': page > 1,
         'results': serializer.data
     })
