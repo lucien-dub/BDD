@@ -29,6 +29,7 @@ from listings.views import (
     get_filtered_matches,
     get_filtered_results,
     debug_match_filtering,
+    weekly_leaderboard,
 )
 
 from django.conf import settings
@@ -96,6 +97,9 @@ urlpatterns = [
 
     # Debug endpoint (à retirer en production)
     path('api/debug/match-filtering/', views.debug_match_filtering, name='debug_match_filtering'),
+
+    # Leaderboard hebdomadaire
+    path('api/leaderboard/weekly/', views.weekly_leaderboard, name='weekly_leaderboard'),
 ]
 
 if settings.DEBUG:

@@ -1286,6 +1286,54 @@ class AllUsersBetsAPIView(APIView):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def weekly_leaderboard(request):
+    """
+    Retourne le classement hebdomadaire basé sur les points gagnés cette semaine
+    """
+    from datetime import timedelta
+    from django.db.models import Sum
+
+    # Calculer le début de la semaine (lundi à 00:00)
+    now = timezone.now()
+    start_of_week = now - timedelta(days=now.weekday(), hours=now.hour,
+                                    minutes=now.minute, seconds=now.second,
+                                    microseconds=now.microsecond)
+
+    # Récupérer toutes les transactions EARN de la semaine en cours
+    weekly_transactions = PointTransaction.objects.filter(
+        transaction_type=PointTransaction.EARN,
+        timestamp__gte=start_of_week
+    ).values('user__id', 'user__username').annotate(
+        weekly_points=Sum('points')
+    ).order_by('-weekly_points')
+
+    # Construire la réponse
+    leaderboard = []
+    rank = 1
+    for entry in weekly_transactions:
+        # Récupérer les points totaux de l'utilisateur
+        user_points = UserPoints.objects.filter(user__id=entry['user__id']).first()
+        total_points = user_points.total_points if user_points else 0
+
+        leaderboard.append({
+            'rank': rank,
+            'user_id': entry['user__id'],
+            'username': entry['user__username'],
+            'weekly_points': entry['weekly_points'],
+            'total_points': total_points
+        })
+        rank += 1
+
+    return Response({
+        'week_start': start_of_week.isoformat(),
+        'week_end': now.isoformat(),
+        'leaderboard': leaderboard,
+        'total_users': len(leaderboard)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_available_academies(request):
     """Retourne la liste de toutes les académies disponibles"""
     academies = Match.objects.filter(
