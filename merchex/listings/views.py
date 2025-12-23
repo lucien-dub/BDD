@@ -1335,16 +1335,24 @@ def get_filtered_matches(request):
     today = now_paris.date()
     current_time = now_paris.time()
 
+    # Debug logging
+    logger.info(f"[FILTERED MATCHES] Today: {today}, Current time: {current_time}")
+
     # Filtrer STRICTEMENT les matchs à venir (non commencés):
-    # - match_joue=False (pas encore joué)
-    # - ET (date > aujourd'hui OU (date == aujourd'hui ET heure >= maintenant))
-    # - ET pas de scores définitifs (pour éviter les incohérences)
+    # CRITÈRES (dans l'ordre) :
+    # 1. Date/heure dans le futur : (date > aujourd'hui OU (date == aujourd'hui ET heure >= maintenant))
+    # 2. Pas de scores finaux : (score1 null OU score2 null OU (score1=0 ET score2=0))
+    # Note: On ne se fie PAS au champ match_joue car il n'est pas toujours à jour
     queryset = Match.objects.filter(
-        Q(date__gt=today) | Q(date=today, heure__gte=current_time),
-        match_joue=False
+        Q(date__gt=today) | Q(date=today, heure__gte=current_time)
     ).filter(
         Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
     )
+
+    # Debug: afficher quelques matchs pour comprendre
+    logger.info(f"[FILTERED MATCHES] Nombre de matchs trouvés: {queryset.count()}")
+    for match in queryset[:3]:
+        logger.info(f"[MATCH] {match.equipe1} vs {match.equipe2}: {match.date} {match.heure}, match_joue={match.match_joue}, scores=({match.score1}, {match.score2})")
 
     # Filtrage par académie
     if academie and academie != 'all':
@@ -1403,16 +1411,25 @@ def get_filtered_results(request):
     today = now_paris.date()
     current_time = now_paris.time()
 
+    # Debug logging
+    logger.info(f"[FILTERED RESULTS] Today: {today}, Current time: {current_time}")
+
     # Filtrer STRICTEMENT les matchs terminés:
-    # - match_joue=True (marqué comme joué)
-    # - ET a des scores (score1 et score2 non null)
-    # - ET (date < aujourd'hui OU (date == aujourd'hui ET heure < maintenant))
+    # CRITÈRES (dans l'ordre) :
+    # 1. Date/heure dans le passé : (date < aujourd'hui OU (date == aujourd'hui ET heure < maintenant))
+    # 2. A des scores : (score1 not null ET score2 not null)
+    # Note: On ne se fie PAS uniquement au champ match_joue car il n'est pas toujours à jour
     queryset = Match.objects.filter(
-        Q(date__lt=today) | Q(date=today, heure__lt=current_time),
-        match_joue=True,
+        Q(date__lt=today) | Q(date=today, heure__lt=current_time)
+    ).filter(
         score1__isnull=False,
         score2__isnull=False
     )
+
+    # Debug: afficher quelques matchs pour comprendre
+    logger.info(f"[FILTERED RESULTS] Nombre de résultats trouvés: {queryset.count()}")
+    for match in queryset[:3]:
+        logger.info(f"[RESULT] {match.equipe1} vs {match.equipe2}: {match.date} {match.heure}, match_joue={match.match_joue}, scores=({match.score1}, {match.score2})")
 
     # Filtrage par académie
     if academie and academie != 'all':
