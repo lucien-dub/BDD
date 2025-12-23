@@ -41,6 +41,8 @@ SECURE_SSL_REDIRECT = True #temporairement à False pour tester mais remettre à
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # ← IMPORTANT: Doit être en premier pour WebSocket
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -262,3 +264,27 @@ DEFAULT_FROM_EMAIL = 'alexandre.montariol@campus-league.com'
 # Paramètres de l'application
 EMAIL_VERIFICATION_EXPIRY_DAYS = 2  # Délai d'expiration du token de vérification
 
+
+# ================== WebSocket Configuration (Django Channels) ==================
+
+# ASGI Application
+ASGI_APPLICATION = 'merchex.asgi.application'
+
+# Configuration du Channel Layer (Redis pour production)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+            "capacity": 1500,  # Nombre max de messages dans un channel
+            "expiry": 10,  # TTL des messages en secondes
+        },
+    },
+}
+
+# Pour le développement sans Redis, utiliser InMemoryChannelLayer :
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels.layers.InMemoryChannelLayer'
+#     }
+# }

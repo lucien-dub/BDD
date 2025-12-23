@@ -463,6 +463,7 @@ def update_cotes_on_new_pari(sender, instance, created, **kwargs):
     Signal déclenché à la création d'un nouveau pari.
     Incrémente le compteur de paris pour le match concerné
     et déclenche un recalcul automatique si le seuil est atteint.
+    Broadcast la mise à jour via WebSocket.
     """
     if created:  # Seulement pour les nouveaux paris, pas les mises à jour
         try:
@@ -473,10 +474,51 @@ def update_cotes_on_new_pari(sender, instance, created, **kwargs):
                 # Incrémenter le compteur (déclenche auto-recalcul si seuil atteint)
                 cote.increment_paris_count()
 
+                # Broadcaster la mise à jour via WebSocket
+                from asgiref.sync import async_to_sync
+                from channels.layers import get_channel_layer
+
+                channel_layer = get_channel_layer()
+
+                if channel_layer:
+                    cotes_data = {
+                        'match_id': instance.match.id,
+                        'cote1': float(cote.cote1),
+                        'cote2': float(cote.cote2),
+                        'coteN': float(cote.coteN),
+                        'last_updated': cote.last_updated.isoformat(),
+                        'paris_count': cote.paris_count_since_last_update,
+                        'match': {
+                            'equipe1': instance.match.equipe1,
+                            'equipe2': instance.match.equipe2,
+                            'date': str(instance.match.date),
+                            'heure': str(instance.match.heure)
+                        }
+                    }
+
+                    # Envoyer aux clients connectés au match spécifique
+                    async_to_sync(channel_layer.group_send)(
+                        f'cotes_{instance.match.id}',
+                        {
+                            'type': 'cotes_update',
+                            'data': cotes_data
+                        }
+                    )
+
+                    # Envoyer aussi au groupe "all"
+                    async_to_sync(channel_layer.group_send)(
+                        'cotes_all',
+                        {
+                            'type': 'cotes_update',
+                            'data': cotes_data
+                        }
+                    )
+
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.info(f"[COTES] Nouveau pari sur match {instance.match.id}. "
-                           f"Compteur: {cote.paris_count_since_last_update}/{cote.RECALCUL_THRESHOLD}")
+                           f"Compteur: {cote.paris_count_since_last_update}/{cote.RECALCUL_THRESHOLD}. "
+                           f"WebSocket broadcast envoyé.")
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
