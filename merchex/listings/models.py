@@ -112,8 +112,38 @@ class Cote(models.Model):
     cote1 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
     cote2 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
 
+    # Champs pour le système de mise à jour en temps réel
+    paris_count_since_last_update = models.IntegerField(default=0)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    # Seuil de paris avant recalcul automatique (peut être configuré)
+    RECALCUL_THRESHOLD = 5
+
     def __str__(self):
         return f"Cote pour {self.match},équipe1: {self.cote1}, équipe2: {self.cote2}, match nul :{self.coteN}"
+
+    def increment_paris_count(self):
+        """Incrémente le compteur de paris et déclenche un recalcul si nécessaire"""
+        self.paris_count_since_last_update += 1
+        self.save()
+
+        # Si le seuil est atteint, recalculer les cotes
+        if self.paris_count_since_last_update >= self.RECALCUL_THRESHOLD:
+            self.recalculer_cotes()
+
+    def recalculer_cotes(self):
+        """Recalcule les cotes et réinitialise le compteur"""
+        from background.odds_calculator import calculer_cotes
+
+        try:
+            calculer_cotes(self.match.id)
+            # Réinitialiser le compteur après recalcul
+            self.paris_count_since_last_update = 0
+            self.save()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur lors du recalcul des cotes pour le match {self.match.id}: {str(e)}")
 
 class Bet(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -426,6 +456,31 @@ def create_user_login_tracker(sender, instance, created, **kwargs):
     """Crée automatiquement un UserLoginTracker pour chaque nouvel utilisateur"""
     if created:
         UserLoginTracker.objects.create(user=instance)
+
+@receiver(post_save, sender='listings.Pari')
+def update_cotes_on_new_pari(sender, instance, created, **kwargs):
+    """
+    Signal déclenché à la création d'un nouveau pari.
+    Incrémente le compteur de paris pour le match concerné
+    et déclenche un recalcul automatique si le seuil est atteint.
+    """
+    if created:  # Seulement pour les nouveaux paris, pas les mises à jour
+        try:
+            # Récupérer la cote du match
+            cote = Cote.objects.filter(match=instance.match).first()
+
+            if cote:
+                # Incrémenter le compteur (déclenche auto-recalcul si seuil atteint)
+                cote.increment_paris_count()
+
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[COTES] Nouveau pari sur match {instance.match.id}. "
+                           f"Compteur: {cote.paris_count_since_last_update}/{cote.RECALCUL_THRESHOLD}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[COTES] Erreur lors de la mise à jour des cotes: {str(e)}")
 
 def user_directory_path(instance, filename):
     # Les fichiers seront uploadés dans MEDIA_ROOT/user_<id>/<filename>
