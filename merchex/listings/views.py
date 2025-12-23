@@ -1392,6 +1392,59 @@ def get_filtered_matches(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def debug_match_filtering(request):
+    """
+    Endpoint de debug temporaire pour comprendre le filtrage
+    """
+    import pytz
+    from datetime import datetime
+
+    # Date et heure actuelles en timezone Europe/Paris
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
+
+    # Récupérer quelques matchs pour debug
+    all_matches = Match.objects.all()[:20]
+
+    debug_info = {
+        'server_time_utc': timezone.now().isoformat(),
+        'server_time_paris': now_paris.isoformat(),
+        'today': str(today),
+        'current_time': str(current_time),
+        'sample_matches': []
+    }
+
+    for match in all_matches:
+        match_datetime_naive = datetime.combine(match.date, match.heure)
+        match_datetime = paris_tz.localize(match_datetime_naive)
+
+        is_future = match.date > today or (match.date == today and match.heure >= current_time)
+
+        debug_info['sample_matches'].append({
+            'id': match.id,
+            'equipe1': match.equipe1,
+            'equipe2': match.equipe2,
+            'date': str(match.date),
+            'heure': str(match.heure),
+            'datetime_combined': match_datetime.isoformat(),
+            'is_future': is_future,
+            'match_joue': match.match_joue,
+            'score1': match.score1,
+            'score2': match.score2,
+            'comparison': {
+                'date_gt_today': match.date > today,
+                'date_eq_today': match.date == today,
+                'heure_gte_current': match.heure >= current_time if match.date == today else None
+            }
+        })
+
+    return Response(debug_info)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_filtered_results(request):
     """
     Retourne les résultats filtrés côté serveur (matchs terminés)
