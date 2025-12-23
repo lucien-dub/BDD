@@ -1319,6 +1319,9 @@ def get_filtered_matches(request):
     Retourne les matchs à venir filtrés et paginés côté serveur
     Query params: academie, sport, niveau, page, page_size
     """
+    import pytz
+    from datetime import datetime
+
     # Récupérer les paramètres de filtrage
     academie = request.GET.get('academie', None)
     sport = request.GET.get('sport', None)
@@ -1326,10 +1329,11 @@ def get_filtered_matches(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 15))
 
-    # Date et heure actuelles pour le filtrage
-    now = timezone.now()
-    today = now.date()
-    current_time = now.time()
+    # Date et heure actuelles en timezone Europe/Paris (timezone des matchs)
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
 
     # Filtrer STRICTEMENT les matchs à venir (non commencés):
     # - match_joue=False (pas encore joué)
@@ -1385,15 +1389,19 @@ def get_filtered_results(request):
     Retourne les résultats filtrés côté serveur (matchs terminés)
     Query params: academie, sport, page, page_size
     """
+    import pytz
+    from datetime import datetime
+
     academie = request.GET.get('academie', None)
     sport = request.GET.get('sport', None)
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 50))
 
-    # Date et heure actuelles pour le filtrage
-    now = timezone.now()
-    today = now.date()
-    current_time = now.time()
+    # Date et heure actuelles en timezone Europe/Paris (timezone des matchs)
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
 
     # Filtrer STRICTEMENT les matchs terminés:
     # - match_joue=True (marqué comme joué)

@@ -64,9 +64,17 @@ class Match(models.Model):
 
     @property
     def est_termine(self):
-        now = timezone.now()
-        match_datetime = datetime.combine(self.date, self.heure)
-        return match_datetime.timestamp() <= now.timestamp() or (self.score1 != 0 or self.score2 != 0)
+        import pytz
+
+        # Utiliser le timezone Europe/Paris (timezone des matchs)
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+
+        # Créer un datetime naïf puis le rendre aware dans le timezone de Paris
+        match_datetime_naive = datetime.combine(self.date, self.heure)
+        match_datetime = paris_tz.localize(match_datetime_naive)
+
+        return match_datetime <= now_paris or (self.score1 != 0 or self.score2 != 0)
     
     def save(self, *args, **kwargs):
         # Si les scores ont changé, vérifier les paris associés
