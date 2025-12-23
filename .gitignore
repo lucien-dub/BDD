@@ -24,3 +24,4 @@ __pycache__/
 # Fichiers Django
 media/
 staticfiles/
+venv-websocket/
