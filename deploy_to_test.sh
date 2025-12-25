@@ -23,7 +23,7 @@ echo ""
 
 # 4. Pull les derniers changements
 echo "📥 Pull des derniers changements..."
-git pull origin claude/add-all-users-bets-endpoint-01UPVCBx4Kmz3Hip1vfxLrL9
+git pull origin claude/fix-match-filtering-FkEyV
 if [ $? -eq 0 ]; then
     echo "✅ Pull réussi"
 else
@@ -108,6 +108,16 @@ RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://test.campus-league.com
 echo "  Status: $RESPONSE"
 if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "401" ]; then
     echo "  ✅ Endpoint répond correctement"
+else
+    echo "  ⚠️  Réponse inattendue"
+fi
+echo ""
+
+echo "Test 4: /api/debug/match-filtering/ (debug endpoint)"
+RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://test.campus-league.com/api/debug/match-filtering/)
+echo "  Status: $RESPONSE"
+if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "401" ]; then
+    echo "  ✅ Endpoint de debug répond correctement"
 else
     echo "  ⚠️  Réponse inattendue"
 fi

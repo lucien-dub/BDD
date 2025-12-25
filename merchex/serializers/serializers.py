@@ -165,10 +165,17 @@ class PariSerializer(serializers.ModelSerializer):
             return None
 
     def validate_match(self, match):
-        now = timezone.now()
-        match_datetime = datetime.combine(match.date, match.heure)
-    
-        if match_datetime <= now:
+        import pytz
+
+        # Utiliser le timezone Europe/Paris (timezone des matchs)
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+
+        # Créer un datetime naïf puis le rendre aware dans le timezone de Paris
+        match_datetime_naive = datetime.combine(match.date, match.heure)
+        match_datetime = paris_tz.localize(match_datetime_naive)
+
+        if match_datetime <= now_paris:
             raise serializers.ValidationError(
                 "Impossible de parier sur un match qui a déjà commencé"
             )

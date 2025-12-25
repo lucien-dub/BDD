@@ -64,9 +64,17 @@ class Match(models.Model):
 
     @property
     def est_termine(self):
-        now = timezone.now()
-        match_datetime = datetime.combine(self.date, self.heure)
-        return match_datetime.timestamp() <= now.timestamp() or (self.score1 != 0 or self.score2 != 0)
+        import pytz
+
+        # Utiliser le timezone Europe/Paris (timezone des matchs)
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+
+        # Créer un datetime naïf puis le rendre aware dans le timezone de Paris
+        match_datetime_naive = datetime.combine(self.date, self.heure)
+        match_datetime = paris_tz.localize(match_datetime_naive)
+
+        return match_datetime <= now_paris or (self.score1 != 0 or self.score2 != 0)
     
     def save(self, *args, **kwargs):
         # Si les scores ont changé, vérifier les paris associés
@@ -104,8 +112,38 @@ class Cote(models.Model):
     cote1 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
     cote2 = models.DecimalField(max_digits=5, decimal_places=2, default=1.10)
 
+    # Champs pour le système de mise à jour en temps réel
+    paris_count_since_last_update = models.IntegerField(default=0)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    # Seuil de paris avant recalcul automatique (peut être configuré)
+    RECALCUL_THRESHOLD = 5
+
     def __str__(self):
         return f"Cote pour {self.match},équipe1: {self.cote1}, équipe2: {self.cote2}, match nul :{self.coteN}"
+
+    def increment_paris_count(self):
+        """Incrémente le compteur de paris et déclenche un recalcul si nécessaire"""
+        self.paris_count_since_last_update += 1
+        self.save()
+
+        # Si le seuil est atteint, recalculer les cotes
+        if self.paris_count_since_last_update >= self.RECALCUL_THRESHOLD:
+            self.recalculer_cotes()
+
+    def recalculer_cotes(self):
+        """Recalcule les cotes et réinitialise le compteur"""
+        from background.odds_calculator import calculer_cotes
+
+        try:
+            calculer_cotes(self.match.id)
+            # Réinitialiser le compteur après recalcul
+            self.paris_count_since_last_update = 0
+            self.save()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erreur lors du recalcul des cotes pour le match {self.match.id}: {str(e)}")
 
 class Bet(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -418,6 +456,73 @@ def create_user_login_tracker(sender, instance, created, **kwargs):
     """Crée automatiquement un UserLoginTracker pour chaque nouvel utilisateur"""
     if created:
         UserLoginTracker.objects.create(user=instance)
+
+@receiver(post_save, sender='listings.Pari')
+def update_cotes_on_new_pari(sender, instance, created, **kwargs):
+    """
+    Signal déclenché à la création d'un nouveau pari.
+    Incrémente le compteur de paris pour le match concerné
+    et déclenche un recalcul automatique si le seuil est atteint.
+    Broadcast la mise à jour via WebSocket.
+    """
+    if created:  # Seulement pour les nouveaux paris, pas les mises à jour
+        try:
+            # Récupérer la cote du match
+            cote = Cote.objects.filter(match=instance.match).first()
+
+            if cote:
+                # Incrémenter le compteur (déclenche auto-recalcul si seuil atteint)
+                cote.increment_paris_count()
+
+                # Broadcaster la mise à jour via WebSocket
+                from asgiref.sync import async_to_sync
+                from channels.layers import get_channel_layer
+
+                channel_layer = get_channel_layer()
+
+                if channel_layer:
+                    cotes_data = {
+                        'match_id': instance.match.id,
+                        'cote1': float(cote.cote1),
+                        'cote2': float(cote.cote2),
+                        'coteN': float(cote.coteN),
+                        'last_updated': cote.last_updated.isoformat(),
+                        'paris_count': cote.paris_count_since_last_update,
+                        'match': {
+                            'equipe1': instance.match.equipe1,
+                            'equipe2': instance.match.equipe2,
+                            'date': str(instance.match.date),
+                            'heure': str(instance.match.heure)
+                        }
+                    }
+
+                    # Envoyer aux clients connectés au match spécifique
+                    async_to_sync(channel_layer.group_send)(
+                        f'cotes_{instance.match.id}',
+                        {
+                            'type': 'cotes_update',
+                            'data': cotes_data
+                        }
+                    )
+
+                    # Envoyer aussi au groupe "all"
+                    async_to_sync(channel_layer.group_send)(
+                        'cotes_all',
+                        {
+                            'type': 'cotes_update',
+                            'data': cotes_data
+                        }
+                    )
+
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[COTES] Nouveau pari sur match {instance.match.id}. "
+                           f"Compteur: {cote.paris_count_since_last_update}/{cote.RECALCUL_THRESHOLD}. "
+                           f"WebSocket broadcast envoyé.")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[COTES] Erreur lors de la mise à jour des cotes: {str(e)}")
 
 def user_directory_path(instance, filename):
     # Les fichiers seront uploadés dans MEDIA_ROOT/user_<id>/<filename>

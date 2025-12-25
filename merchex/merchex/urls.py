@@ -28,6 +28,8 @@ from listings.views import (
     get_available_sports,
     get_filtered_matches,
     get_filtered_results,
+    debug_match_filtering,
+    weekly_leaderboard,
 )
 
 from django.conf import settings
@@ -92,6 +94,12 @@ urlpatterns = [
     path('api/sports/available/', views.get_available_sports, name='available_sports'),
     path('api/matches/filtered/', views.get_filtered_matches, name='filtered_matches'),
     path('api/results/filtered/', views.get_filtered_results, name='filtered_results'),
+
+    # Debug endpoint (à retirer en production)
+    path('api/debug/match-filtering/', views.debug_match_filtering, name='debug_match_filtering'),
+
+    # Leaderboard hebdomadaire
+    path('api/leaderboard/weekly/', views.weekly_leaderboard, name='weekly_leaderboard'),
 ]
 
 if settings.DEBUG:

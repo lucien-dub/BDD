@@ -1,0 +1,4 @@
+# Dépendances pour WebSocket (Cotes en temps réel)
+channels[daphne]==4.0.0
+channels-redis==4.1.0
+redis==5.0.1

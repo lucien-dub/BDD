@@ -1286,6 +1286,54 @@ class AllUsersBetsAPIView(APIView):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def weekly_leaderboard(request):
+    """
+    Retourne le classement hebdomadaire basé sur les points gagnés cette semaine
+    """
+    from datetime import timedelta
+    from django.db.models import Sum
+
+    # Calculer le début de la semaine (lundi à 00:00)
+    now = timezone.now()
+    start_of_week = now - timedelta(days=now.weekday(), hours=now.hour,
+                                    minutes=now.minute, seconds=now.second,
+                                    microseconds=now.microsecond)
+
+    # Récupérer toutes les transactions EARN de la semaine en cours
+    weekly_transactions = PointTransaction.objects.filter(
+        transaction_type=PointTransaction.EARN,
+        timestamp__gte=start_of_week
+    ).values('user__id', 'user__username').annotate(
+        weekly_points=Sum('points')
+    ).order_by('-weekly_points')
+
+    # Construire la réponse
+    leaderboard = []
+    rank = 1
+    for entry in weekly_transactions:
+        # Récupérer les points totaux de l'utilisateur
+        user_points = UserPoints.objects.filter(user__id=entry['user__id']).first()
+        total_points = user_points.total_points if user_points else 0
+
+        leaderboard.append({
+            'rank': rank,
+            'user_id': entry['user__id'],
+            'username': entry['user__username'],
+            'weekly_points': entry['weekly_points'],
+            'total_points': total_points
+        })
+        rank += 1
+
+    return Response({
+        'week_start': start_of_week.isoformat(),
+        'week_end': now.isoformat(),
+        'leaderboard': leaderboard,
+        'total_users': len(leaderboard)
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_available_academies(request):
     """Retourne la liste de toutes les académies disponibles"""
     academies = Match.objects.filter(
@@ -1319,6 +1367,9 @@ def get_filtered_matches(request):
     Retourne les matchs à venir filtrés et paginés côté serveur
     Query params: academie, sport, niveau, page, page_size
     """
+    import pytz
+    from datetime import datetime
+
     # Récupérer les paramètres de filtrage
     academie = request.GET.get('academie', None)
     sport = request.GET.get('sport', None)
@@ -1326,14 +1377,30 @@ def get_filtered_matches(request):
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 15))
 
+    # Date et heure actuelles en timezone Europe/Paris (timezone des matchs)
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
+
+    # Debug logging
+    logger.info(f"[FILTERED MATCHES] Today: {today}, Current time: {current_time}")
+
     # Filtrer STRICTEMENT les matchs à venir (non commencés):
-    # - match_joue=False (pas encore joué)
-    # - ET pas de scores définitifs (pour éviter les incohérences)
+    # CRITÈRES (dans l'ordre) :
+    # 1. Date/heure dans le futur : (date > aujourd'hui OU (date == aujourd'hui ET heure >= maintenant))
+    # 2. Pas de scores finaux : (score1 null OU score2 null OU (score1=0 ET score2=0))
+    # Note: On ne se fie PAS au champ match_joue car il n'est pas toujours à jour
     queryset = Match.objects.filter(
-        match_joue=False
+        Q(date__gt=today) | Q(date=today, heure__gte=current_time)
     ).filter(
         Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
     )
+
+    # Debug: afficher quelques matchs pour comprendre
+    logger.info(f"[FILTERED MATCHES] Nombre de matchs trouvés: {queryset.count()}")
+    for match in queryset[:3]:
+        logger.info(f"[MATCH] {match.equipe1} vs {match.equipe2}: {match.date} {match.heure}, match_joue={match.match_joue}, scores=({match.score1}, {match.score2})")
 
     # Filtrage par académie
     if academie and academie != 'all':
@@ -1373,24 +1440,97 @@ def get_filtered_matches(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def debug_match_filtering(request):
+    """
+    Endpoint de debug temporaire pour comprendre le filtrage
+    """
+    import pytz
+    from datetime import datetime
+
+    # Date et heure actuelles en timezone Europe/Paris
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
+
+    # Récupérer quelques matchs pour debug
+    all_matches = Match.objects.all()[:20]
+
+    debug_info = {
+        'server_time_utc': timezone.now().isoformat(),
+        'server_time_paris': now_paris.isoformat(),
+        'today': str(today),
+        'current_time': str(current_time),
+        'sample_matches': []
+    }
+
+    for match in all_matches:
+        match_datetime_naive = datetime.combine(match.date, match.heure)
+        match_datetime = paris_tz.localize(match_datetime_naive)
+
+        is_future = match.date > today or (match.date == today and match.heure >= current_time)
+
+        debug_info['sample_matches'].append({
+            'id': match.id,
+            'equipe1': match.equipe1,
+            'equipe2': match.equipe2,
+            'date': str(match.date),
+            'heure': str(match.heure),
+            'datetime_combined': match_datetime.isoformat(),
+            'is_future': is_future,
+            'match_joue': match.match_joue,
+            'score1': match.score1,
+            'score2': match.score2,
+            'comparison': {
+                'date_gt_today': match.date > today,
+                'date_eq_today': match.date == today,
+                'heure_gte_current': match.heure >= current_time if match.date == today else None
+            }
+        })
+
+    return Response(debug_info)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_filtered_results(request):
     """
     Retourne les résultats filtrés côté serveur (matchs terminés)
     Query params: academie, sport, page, page_size
     """
+    import pytz
+    from datetime import datetime
+
     academie = request.GET.get('academie', None)
     sport = request.GET.get('sport', None)
     page = int(request.GET.get('page', 1))
     page_size = int(request.GET.get('page_size', 50))
 
+    # Date et heure actuelles en timezone Europe/Paris (timezone des matchs)
+    paris_tz = pytz.timezone('Europe/Paris')
+    now_paris = timezone.now().astimezone(paris_tz)
+    today = now_paris.date()
+    current_time = now_paris.time()
+
+    # Debug logging
+    logger.info(f"[FILTERED RESULTS] Today: {today}, Current time: {current_time}")
+
     # Filtrer STRICTEMENT les matchs terminés:
-    # - match_joue=True (marqué comme joué)
-    # - ET a des scores (score1 et score2 non null)
+    # CRITÈRES (dans l'ordre) :
+    # 1. Date/heure dans le passé : (date < aujourd'hui OU (date == aujourd'hui ET heure < maintenant))
+    # 2. A des scores : (score1 not null ET score2 not null)
+    # Note: On ne se fie PAS uniquement au champ match_joue car il n'est pas toujours à jour
     queryset = Match.objects.filter(
-        match_joue=True,
+        Q(date__lt=today) | Q(date=today, heure__lt=current_time)
+    ).filter(
         score1__isnull=False,
         score2__isnull=False
     )
+
+    # Debug: afficher quelques matchs pour comprendre
+    logger.info(f"[FILTERED RESULTS] Nombre de résultats trouvés: {queryset.count()}")
+    for match in queryset[:3]:
+        logger.info(f"[RESULT] {match.equipe1} vs {match.equipe2}: {match.date} {match.heure}, match_joue={match.match_joue}, scores=({match.score1}, {match.score2})")
 
     # Filtrage par académie
     if academie and academie != 'all':
