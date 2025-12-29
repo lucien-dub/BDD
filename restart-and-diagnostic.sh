@@ -82,8 +82,19 @@ sudo pkill -f "daphne" 2>/dev/null || print_status "Aucun Daphne actif" "warning
 sleep 1
 
 print_status "Arrêt de Redis..." "info"
-redis-cli shutdown 2>/dev/null || print_status "Redis n'était pas actif" "warning"
+# Essayer plusieurs méthodes pour arrêter Redis
+redis-cli shutdown 2>/dev/null || print_status "Redis-cli shutdown échoué" "warning"
+sudo systemctl stop redis-server 2>/dev/null || true
+sudo systemctl stop redis 2>/dev/null || true
+sudo pkill -f redis-server 2>/dev/null || true
 sleep 2
+
+# Vérifier que Redis est bien arrêté
+if redis-cli ping > /dev/null 2>&1; then
+    print_status "ATTENTION: Redis tourne encore, tentative de kill forcé" "warning"
+    sudo pkill -9 -f redis-server 2>/dev/null || true
+    sleep 1
+fi
 
 echo ""
 print_status "Tous les services ont été arrêtés" "success"
@@ -91,13 +102,41 @@ echo ""
 
 # 1.2 Démarrage de Redis
 echo -e "${YELLOW}[2/6] Démarrage de Redis...${NC}"
-redis-server --daemonize yes --port 6379 2>/dev/null
-sleep 2
+
+# Vérifier si Redis est déjà en cours d'exécution
 if redis-cli ping > /dev/null 2>&1; then
-    print_status "Redis démarré sur port 6379" "success"
+    print_status "Redis est déjà actif" "success"
 else
-    print_status "ERREUR: Redis n'a pas démarré" "error"
-    exit 1
+    # Vérifier si Redis est installé
+    if ! command -v redis-server &> /dev/null; then
+        print_status "ERREUR: redis-server n'est pas installé" "error"
+        exit 1
+    fi
+
+    # Démarrer Redis avec sortie d'erreur visible
+    echo "Commande: redis-server --daemonize yes --port 6379"
+    redis-server --daemonize yes --port 6379
+    REDIS_START_EXIT=$?
+
+    if [ $REDIS_START_EXIT -ne 0 ]; then
+        print_status "Erreur au démarrage de Redis (code: $REDIS_START_EXIT)" "error"
+        echo "Tentative de démarrage avec systemd..."
+        sudo systemctl start redis-server 2>/dev/null || sudo systemctl start redis 2>/dev/null
+    fi
+
+    sleep 2
+
+    if redis-cli ping > /dev/null 2>&1; then
+        print_status "Redis démarré sur port 6379" "success"
+    else
+        print_status "ERREUR: Redis n'a pas démarré" "error"
+        echo "Vérification des processus Redis:"
+        ps aux | grep redis | grep -v grep || echo "Aucun processus Redis"
+        echo ""
+        echo "Tentative de diagnostic:"
+        redis-cli ping 2>&1 || echo "Redis-cli ne répond pas"
+        exit 1
+    fi
 fi
 echo ""
 
