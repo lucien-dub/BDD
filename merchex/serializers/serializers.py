@@ -7,6 +7,7 @@ from rest_framework import status
 
 from django.utils import timezone
 from datetime import datetime, date
+from decimal import Decimal
 
 from listings.models import Match, Classement, UserPoints, PointTransaction, User, Cote, Pari, Bet, EmailVerificationToken, Verification
 from listings.models import photo_profil, Press, Academie
@@ -67,9 +68,13 @@ class BetCreateSerializer(serializers.ModelSerializer):
             
         if data['total_odds'] <= 0:
             raise serializers.ValidationError("La cote totale doit être supérieure à 0")
-            
-        calculated_winnings = data['mise'] * data['total_odds']
-        if abs(calculated_winnings - data['potential_winnings']) > 0.01:
+
+        # ✅ CORRECTION: Convertir total_odds en Decimal pour éviter Decimal × float
+        total_odds_decimal = Decimal(str(data['total_odds']))
+        potential_winnings_decimal = Decimal(str(data['potential_winnings']))
+
+        calculated_winnings = data['mise'] * total_odds_decimal
+        if abs(calculated_winnings - potential_winnings_decimal) > Decimal('0.01'):
             raise serializers.ValidationError("Les gains potentiels ne correspondent pas au calcul mise * cote_totale")
             
         return data
