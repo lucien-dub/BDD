@@ -86,10 +86,14 @@ sleep 1
 
 print_status "Arrêt de Gunicorn (PROD - port 8000)..." "info"
 sudo pkill -f "gunicorn.*8000" 2>/dev/null || print_status "Aucun Gunicorn sur 8000" "warning"
+# Tuer aussi les processus Python écoutant sur 8000
+sudo lsof -ti:8000 | xargs -r sudo kill -9 2>/dev/null || true
 sleep 1
 
 print_status "Arrêt de Gunicorn (TEST - port 8001)..." "info"
 sudo pkill -f "gunicorn.*8001" 2>/dev/null || print_status "Aucun Gunicorn sur 8001" "warning"
+# Tuer aussi les processus Python écoutant sur 8001
+sudo lsof -ti:8001 | xargs -r sudo kill -9 2>/dev/null || true
 sleep 1
 
 print_status "Arrêt de Daphne (WebSocket - port 8002)..." "info"
@@ -113,6 +117,16 @@ fi
 
 echo ""
 print_status "Tous les services ont été arrêtés" "success"
+echo ""
+
+# Nettoyer et recréer les fichiers logs avec les bonnes permissions
+print_status "Nettoyage des fichiers logs..." "info"
+sudo rm -f /tmp/gunicorn-*.log /tmp/daphne-*.log 2>/dev/null || true
+sudo touch /tmp/gunicorn-prod.log /tmp/gunicorn-prod-error.log /tmp/gunicorn-prod-access.log
+sudo touch /tmp/gunicorn-test.log /tmp/gunicorn-test-error.log /tmp/gunicorn-test-access.log
+sudo touch /tmp/daphne-test.log
+sudo chown $USER:$USER /tmp/gunicorn-*.log /tmp/daphne-*.log 2>/dev/null || true
+print_status "Fichiers logs nettoyés" "success"
 echo ""
 
 # 1.2 Démarrage de Redis
