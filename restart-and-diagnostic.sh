@@ -20,8 +20,23 @@ BOLD='\033[1m'
 # Variables des chemins
 PROD_DIR="/home/ubuntu/BDD"
 TEST_DIR="/home/ubuntu/BDD-test"
-VENV_PROD="$PROD_DIR/venv"
-VENV_TEST="$TEST_DIR/venv-websocket"
+
+# Fonction pour détecter l'environnement virtuel
+detect_venv() {
+    local base_dir="$1"
+    # Chercher les venv possibles dans l'ordre de priorité
+    for venv_name in "venv" "venv-websocket" "venv-test" "venv-bdd" "venv-serveur" "venv-myapp"; do
+        if [ -d "$base_dir/$venv_name" ] && [ -f "$base_dir/$venv_name/bin/activate" ]; then
+            echo "$base_dir/$venv_name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Détecter les environnements virtuels
+VENV_PROD=$(detect_venv "$PROD_DIR")
+VENV_TEST=$(detect_venv "$TEST_DIR")
 
 # Fonction d'affichage de section
 print_section() {
@@ -146,7 +161,8 @@ if [ -d "$PROD_DIR" ]; then
     cd $PROD_DIR/merchex
 
     # Activer l'environnement virtuel
-    if [ -d "$VENV_PROD" ]; then
+    if [ -n "$VENV_PROD" ] && [ -d "$VENV_PROD" ]; then
+        echo "Environnement virtuel détecté: $VENV_PROD"
         source $VENV_PROD/bin/activate
 
         # Appliquer les migrations
@@ -185,7 +201,8 @@ if [ -d "$TEST_DIR" ]; then
     cd $TEST_DIR/merchex
 
     # Activer l'environnement virtuel
-    if [ -d "$VENV_TEST" ]; then
+    if [ -n "$VENV_TEST" ] && [ -d "$VENV_TEST" ]; then
+        echo "Environnement virtuel détecté: $VENV_TEST"
         source $VENV_TEST/bin/activate
 
         # Appliquer les migrations
@@ -220,10 +237,16 @@ echo ""
 
 # 1.5 Démarrage Daphne (WebSocket - port 8002)
 echo -e "${YELLOW}[5/6] Démarrage de Daphne pour WebSocket (port 8002)...${NC}"
-if [ -d "$TEST_DIR" ]; then
+
+# Vérifier si daphne-test.service existe
+if systemctl is-active --quiet daphne-test.service 2>/dev/null; then
+    print_status "Daphne est déjà géré par systemd (daphne-test.service)" "success"
+    echo "Pour redémarrer: sudo systemctl restart daphne-test.service"
+elif [ -d "$TEST_DIR" ]; then
     cd $TEST_DIR/merchex
 
-    if [ -d "$VENV_TEST" ]; then
+    if [ -n "$VENV_TEST" ] && [ -d "$VENV_TEST" ]; then
+        echo "Environnement virtuel détecté: $VENV_TEST"
         source $VENV_TEST/bin/activate
 
         # Démarrer Daphne
@@ -326,15 +349,15 @@ echo ""
 print_section "2.3 - PORTS EN ÉCOUTE"
 
 echo -e "${BOLD}Ports Django (8000, 8001) et WebSocket (8002):${NC}"
-sudo netstat -tlnp | grep -E ':(8000|8001|8002)' || print_status "Aucun processus sur ces ports" "warning"
+sudo ss -tlnp | grep -E ':(8000|8001|8002)' || print_status "Aucun processus sur ces ports" "warning"
 echo ""
 
 echo -e "${BOLD}Port Redis (6379):${NC}"
-sudo netstat -tlnp | grep ':6379' || print_status "Redis non en écoute" "warning"
+sudo ss -tlnp | grep ':6379' || print_status "Redis non en écoute" "warning"
 echo ""
 
 echo -e "${BOLD}Ports HTTP/HTTPS (80, 443):${NC}"
-sudo netstat -tlnp | grep -E ':(80|443)' || print_status "Nginx non en écoute" "warning"
+sudo ss -tlnp | grep -E ':(80|443)' || print_status "Nginx non en écoute" "warning"
 echo ""
 
 # 2.4 Configurations Nginx
