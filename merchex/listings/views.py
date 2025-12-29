@@ -1560,3 +1560,136 @@ def get_filtered_results(request):
         'has_previous': page > 1,
         'results': serializer.data
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sports_with_levels(request):
+    """
+    Retourne tous les sports disponibles avec leurs niveaux respectifs.
+    Seuls les matchs futurs (match_joue=False) sont considérés.
+    """
+    try:
+        import pytz
+        from datetime import datetime
+
+        # Date et heure actuelles en timezone Europe/Paris
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+        today = now_paris.date()
+        current_time = now_paris.time()
+
+        # Récupérer tous les matchs futurs
+        future_matches = Match.objects.filter(
+            Q(date__gt=today) | Q(date=today, heure__gte=current_time)
+        ).filter(
+            Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
+        )
+
+        # Créer un dictionnaire sport -> set de niveaux
+        sports_data = {}
+
+        for match in future_matches:
+            sport = match.sport
+            niveau = match.niveau
+
+            if sport not in sports_data:
+                sports_data[sport] = set()
+
+            if niveau:  # Ajouter le niveau s'il existe
+                sports_data[sport].add(niveau)
+
+        # Convertir en format attendu par le frontend
+        result = []
+        for sport, niveaux in sports_data.items():
+            result.append({
+                'sport': sport,
+                'niveaux': sorted(list(niveaux))  # Trier les niveaux alphabétiquement
+            })
+
+        # Trier par nom de sport
+        result = sorted(result, key=lambda x: x['sport'])
+
+        return Response({
+            'sports': result,
+            'count': len(result)
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur dans sports_with_levels: {str(e)}")
+        return Response({
+            'error': 'Erreur lors de la récupération des sports et niveaux',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def all_future_matches(request):
+    """
+    Retourne TOUS les matchs futurs sans pagination.
+    Supporte les mêmes filtres que l'endpoint paginé.
+
+    Paramètres query:
+    - academie (optionnel): Filtrer par académie
+    - sport (optionnel): Filtrer par sport
+    - niveau (optionnel): Filtrer par niveau
+    """
+    try:
+        import pytz
+        from datetime import datetime
+
+        # Date et heure actuelles en timezone Europe/Paris
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+        today = now_paris.date()
+        current_time = now_paris.time()
+
+        # Filtres de base : matchs futurs uniquement
+        queryset = Match.objects.filter(
+            Q(date__gt=today) | Q(date=today, heure__gte=current_time)
+        ).filter(
+            Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
+        )
+
+        # Appliquer les filtres optionnels
+        academie = request.GET.get('academie', 'all')
+        sport = request.GET.get('sport', 'all')
+        niveau = request.GET.get('niveau', 'all')
+
+        if academie and academie != 'all':
+            queryset = queryset.filter(academie__iexact=academie)
+
+        if sport and sport != 'all':
+            queryset = queryset.filter(sport__iexact=sport)
+
+        if niveau and niveau != 'all':
+            queryset = queryset.filter(niveau__iexact=niveau)
+
+        # Ordonner par date puis heure
+        queryset = queryset.order_by('date', 'heure')
+
+        # Limiter à 1000 matchs max pour éviter les réponses trop lourdes
+        MAX_MATCHES = 1000
+        total_count = queryset.count()
+        queryset = queryset[:MAX_MATCHES]
+
+        # Sérialiser les données
+        serializer = MatchSerializer(queryset, many=True)
+
+        return Response({
+            'matches': serializer.data,
+            'count': len(serializer.data),
+            'total_available': total_count,
+            'filters': {
+                'academie': academie,
+                'sport': sport,
+                'niveau': niveau
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur dans all_future_matches: {str(e)}")
+        return Response({
+            'error': 'Erreur lors de la récupération des matchs',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -30,6 +30,8 @@ from listings.views import (
     get_filtered_results,
     debug_match_filtering,
     weekly_leaderboard,
+    sports_with_levels,
+    all_future_matches,
 )
 
 from django.conf import settings
@@ -94,6 +96,10 @@ urlpatterns = [
     path('api/sports/available/', views.get_available_sports, name='available_sports'),
     path('api/matches/filtered/', views.get_filtered_matches, name='filtered_matches'),
     path('api/results/filtered/', views.get_filtered_results, name='filtered_results'),
+
+    # Nouveaux endpoints pour sports avec niveaux et tous les matchs futurs
+    path('api/sports/with-levels/', views.sports_with_levels, name='sports_with_levels'),
+    path('api/matches/all-future/', views.all_future_matches, name='all_future_matches'),
 
     # Debug endpoint (à retirer en production)
     path('api/debug/match-filtering/', views.debug_match_filtering, name='debug_match_filtering'),
