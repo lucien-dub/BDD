@@ -32,6 +32,7 @@ from listings.views import (
     weekly_leaderboard,
     sports_with_levels,
     all_future_matches,
+    available_levels,
 )
 
 from django.conf import settings
@@ -94,6 +95,7 @@ urlpatterns = [
     path('api/academies/available/', views.get_available_academies, name='available_academies'),
     path('api/academies-available/', views.get_available_academies, name='available_academies_alias'),  # Alias pour compatibilité frontend
     path('api/sports/available/', views.get_available_sports, name='available_sports'),
+    path('api/available-levels/', views.available_levels, name='available_levels'),
     path('api/matches/filtered/', views.get_filtered_matches, name='filtered_matches'),
     path('api/results/filtered/', views.get_filtered_results, name='filtered_results'),
 

@@ -1693,3 +1693,74 @@ def all_future_matches(request):
             'error': 'Erreur lors de la récupération des matchs',
             'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def available_levels(request):
+    """
+    Retourne les niveaux disponibles pour une académie et un sport donnés.
+    
+    Query params:
+    - academie (string, requis) : L'académie sélectionnée
+    - sport (string, requis) : Le sport sélectionné (peut être groupé, ex: "Football")
+    
+    Réponse:
+    {
+        "levels": ["U12", "U15", "U17", "U19", "Senior"]
+    }
+    """
+    try:
+        import pytz
+        from datetime import datetime
+
+        academie = request.GET.get('academie')
+        sport = request.GET.get('sport')
+
+        if not academie or not sport:
+            return Response(
+                {'error': 'Les paramètres academie et sport sont requis'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Date et heure actuelles en timezone Europe/Paris
+        paris_tz = pytz.timezone('Europe/Paris')
+        now_paris = timezone.now().astimezone(paris_tz)
+        today = now_paris.date()
+        current_time = now_paris.time()
+
+        # Récupérer tous les matchs FUTURS pour cette académie et ce sport
+        # IMPORTANT: Le sport dans la DB peut être "Football Masc" ou "Football Fem"
+        # mais le frontend peut envoyer juste "Football" (groupé)
+        # Utiliser icontains pour matcher correctement
+        matchs = Match.objects.filter(
+            Q(date__gt=today) | Q(date=today, heure__gte=current_time)
+        ).filter(
+            Q(score1__isnull=True) | Q(score2__isnull=True) | Q(score1=0, score2=0)
+        ).filter(
+            academie__iexact=academie,
+            sport__icontains=sport  # icontains pour matcher "Football" avec "Football Masc/Fem"
+        ).exclude(
+            # Exclure les matchs avec forfait
+            Q(forfait_1=True) | Q(forfait_2=True)
+        )
+
+        # Extraire les niveaux uniques et trier
+        levels = matchs.values_list('niveau', flat=True).distinct().order_by('niveau')
+
+        # Filtrer les niveaux null/vides
+        levels = [level for level in levels if level]
+
+        logger.info(f"[AVAILABLE LEVELS] Academie: {academie}, Sport: {sport}, Levels found: {levels}")
+
+        return Response({
+            'levels': list(levels),
+            'count': len(levels)
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erreur dans available_levels: {str(e)}")
+        return Response({
+            'error': 'Erreur lors de la récupération des niveaux',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
