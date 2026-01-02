@@ -127,9 +127,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 FRONTEND_URL = 'https://campus-league.com/'
 
 SIMPLE_JWT = {
-    'USER_ID_FIELD': 'id', 
+    'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),  # Token de connexion valide 7 jours
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),  # Token de renouvellement valide 30 jours
+    'ROTATE_REFRESH_TOKENS': True,  # Génère un nouveau refresh token à chaque renouvellement
+    # Note: BLACKLIST_AFTER_ROTATION nécessite 'rest_framework_simplejwt.token_blacklist' dans INSTALLED_APPS
 }
 
 CRONJOBS = [
